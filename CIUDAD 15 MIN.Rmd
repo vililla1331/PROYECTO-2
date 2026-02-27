@@ -1,0 +1,42 @@
+---
+title: "PROYECTO II"
+output: html_document
+date: "2026-02-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### **1. PRIMER PASO**
+
+El primer paso va a ser pasar los archivos con formato .GeoJSON a formato .CSV
+
+Al extraer los datos de OpenStreetMap, las geometrías venían mezcladas (puntos y polígonos). Para poder unificarlas y calcular distancias en el análisis espacial posterior, aplicamos una transformación espacial (st_centroid()) para convertir todos los polígonos en puntos centrales, resolviendo así la inconsistencia del dataset original.
+
+Este mismo proceso lo realizaremos con todos las bases de datos que se encuentren en formato .GeoJSON
+
+```{r}
+library(sf)
+library(dplyr)
+
+# 1. Leer el archivo
+datos_bancos <- st_read("C:/Users/xabel/OneDrive/Escritorio/Universidad/SEGUNDO CURSO/2º CUATRI/PROYECTO II/CIUDAD 15 MIN/Datos Proyecto CIUDAD 15 MIN/supermercados.geojson")  # Cambiamos el nombre del archivo que queramos transformar
+
+# 2. Convertir cualquier edificio (polígono) en un solo punto central
+# Nota: Es normal si te sale un 'Warning' rojo aquí sobre las proyecciones, ignóralo.
+datos_bancos_puntos <- st_centroid(datos_bancos)
+
+# 3. Ahora sí, extraemos las coordenadas (ya que todo son puntos)
+datos_bancos_listos <- datos_bancos_puntos %>%
+  mutate(
+    longitud = st_coordinates(.)[,1],
+    latitud = st_coordinates(.)[,2]
+  )
+
+# 4. Quitamos la geometría y guardamos el CSV
+datos_tabla <- st_drop_geometry(datos_bancos_listos)
+write.csv2(datos_tabla, "C:/Users/xabel/OneDrive/Escritorio/Universidad/SEGUNDO CURSO/2º CUATRI/PROYECTO II/CIUDAD 15 MIN/Datos Proyecto CIUDAD 15 MIN/supermercados.csv", row.names = FALSE)  # Cambiamos al nuevo nombre del archivo transformado
+```
+
+

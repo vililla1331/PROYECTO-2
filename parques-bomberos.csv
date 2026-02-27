@@ -1,0 +1,7 @@
+"id";"X.id";"addr.housenumber";"addr.postcode";"addr.street";"amenity";"name";"name.ca";"name.es";"operator";"longitud";"latitud"
+"way/36961326";"way/36961326";NA;NA;NA;"fire_station";"Parc de Bombers Zona Nord ""Vicente Sivera""";"Parc de Bombers Zona Nord ""Vicente Sivera""";"Parque de Bomberos Zona Norte ""Vicente Sivera""";"Ajuntament de València";-0,353911504978726;39,4817429926647
+"way/119438734";"way/119438734";NA;NA;NA;"fire_station";"Parc Central de Bombers";NA;NA;NA;-0,367373159927787;39,4539684404231
+"way/249831995";"way/249831995";"2";"46015";"Carrer d'Antoni Reig i Ventura (Rovellet)";"fire_station";"Parc de Bombers Campanar";"Parc de Bombers Campanar";"Parque de Bomberos Campanar";NA;-0,405940396089979;39,4829275808066
+"node/1692104846";"node/1692104846";NA;NA;NA;"fire_station";NA;NA;NA;NA;-0,4037856;39,4670812
+"node/2333100324";"node/2333100324";NA;NA;NA;"fire_station";"Parque de Bomberos El Saler";NA;NA;NA;-0,3276972;39,3607498
+"node/4250872921";"node/4250872921";NA;NA;NA;"fire_station";"Retén de Bomberos del Saler";NA;NA;NA;-0,3302924;39,3909066

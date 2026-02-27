@@ -1,0 +1,2307 @@
+{
+  "type": "FeatureCollection",
+  "generator": "overpass-turbo",
+  "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL.",
+  "timestamp": "2026-02-25T19:52:30Z",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "relation/2024883",
+        "addr:housenumber": "248",
+        "addr:street": "Avinguda de la Constitució",
+        "amenity": "library",
+        "building": "yes",
+        "name": "Biblioteca Valenciana",
+        "name:ca": "Biblioteca Valenciana Nicolau Primitiu",
+        "name:etymology:wikidata": "Q8247561",
+        "type": "multipolygon",
+        "wikidata": "Q8247561",
+        "wikipedia": "ca:Biblioteca Valenciana Nicolau Primitiu"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.3696797,
+              39.4989125
+            ],
+            [
+              -0.3697213,
+              39.4988144
+            ],
+            [
+              -0.3695896,
+              39.4987812
+            ],
+            [
+              -0.3695809,
+              39.4988018
+            ],
+            [
+              -0.3690823,
+              39.4986768
+            ],
+            [
+              -0.3690925,
+              39.4986529
+            ],
+            [
+              -0.3689614,
+              39.4986195
+            ],
+            [
+              -0.3689155,
+              39.4987265
+            ],
+            [
+              -0.3689469,
+              39.4987346
+            ],
+            [
+              -0.3684834,
+              39.4997169
+            ],
+            [
+              -0.3684538,
+              39.4997096
+            ],
+            [
+              -0.3684135,
+              39.4998076
+            ],
+            [
+              -0.3685412,
+              39.4998389
+            ],
+            [
+              -0.3690771,
+              39.4999738
+            ],
+            [
+              -0.3692108,
+              39.500007
+            ],
+            [
+              -0.3692538,
+              39.4999041
+            ],
+            [
+              -0.3692178,
+              39.4998952
+            ],
+            [
+              -0.3693781,
+              39.4995033
+            ],
+            [
+              -0.369447,
+              39.4995198
+            ],
+            [
+              -0.3694701,
+              39.4994664
+            ],
+            [
+              -0.3694635,
+              39.4994644
+            ],
+            [
+              -0.3695075,
+              39.4993549
+            ],
+            [
+              -0.3695148,
+              39.4993554
+            ],
+            [
+              -0.3695351,
+              39.4993024
+            ],
+            [
+              -0.3694668,
+              39.4992862
+            ],
+            [
+              -0.3696418,
+              39.4989029
+            ],
+            [
+              -0.3696797,
+              39.4989125
+            ]
+          ],
+          [
+            [
+              -0.3692662,
+              39.4996251
+            ],
+            [
+              -0.3692542,
+              39.4996551
+            ],
+            [
+              -0.3692139,
+              39.4996455
+            ],
+            [
+              -0.3692259,
+              39.4996155
+            ],
+            [
+              -0.3692662,
+              39.4996251
+            ]
+          ],
+          [
+            [
+              -0.3693013,
+              39.4995393
+            ],
+            [
+              -0.3692894,
+              39.4995693
+            ],
+            [
+              -0.369249,
+              39.4995597
+            ],
+            [
+              -0.369261,
+              39.4995297
+            ],
+            [
+              -0.3693013,
+              39.4995393
+            ]
+          ],
+          [
+            [
+              -0.3692276,
+              39.4997092
+            ],
+            [
+              -0.3692156,
+              39.4997402
+            ],
+            [
+              -0.3691843,
+              39.499733
+            ],
+            [
+              -0.3691963,
+              39.499702
+            ],
+            [
+              -0.3692276,
+              39.4997092
+            ]
+          ],
+          [
+            [
+              -0.3691933,
+              39.4997932
+            ],
+            [
+              -0.3691813,
+              39.4998242
+            ],
+            [
+              -0.36915,
+              39.499817
+            ],
+            [
+              -0.369162,
+              39.499786
+            ],
+            [
+              -0.3691933,
+              39.4997932
+            ]
+          ],
+          [
+            [
+              -0.3690074,
+              39.4998847
+            ],
+            [
+              -0.3689963,
+              39.4999112
+            ],
+            [
+              -0.3689627,
+              39.4999028
+            ],
+            [
+              -0.3689738,
+              39.4998763
+            ],
+            [
+              -0.3690074,
+              39.4998847
+            ]
+          ],
+          [
+            [
+              -0.368702,
+              39.4998075
+            ],
+            [
+              -0.3686906,
+              39.4998338
+            ],
+            [
+              -0.3686543,
+              39.4998243
+            ],
+            [
+              -0.3686657,
+              39.499798
+            ],
+            [
+              -0.368702,
+              39.4998075
+            ]
+          ],
+          [
+            [
+              -0.3695454,
+              39.498955
+            ],
+            [
+              -0.3695075,
+              39.4989446
+            ],
+            [
+              -0.3695231,
+              39.498908
+            ],
+            [
+              -0.3695637,
+              39.4989185
+            ],
+            [
+              -0.3695454,
+              39.498955
+            ]
+          ],
+          [
+            [
+              -0.3694846,
+              39.4990889
+            ],
+            [
+              -0.3694446,
+              39.4990781
+            ],
+            [
+              -0.3694603,
+              39.4990436
+            ],
+            [
+              -0.3695003,
+              39.4990545
+            ],
+            [
+              -0.3694846,
+              39.4990889
+            ]
+          ],
+          [
+            [
+              -0.3692228,
+              39.4994638
+            ],
+            [
+              -0.3690623,
+              39.4998563
+            ],
+            [
+              -0.3685876,
+              39.4997364
+            ],
+            [
+              -0.3687685,
+              39.4993522
+            ],
+            [
+              -0.3692228,
+              39.4994638
+            ]
+          ],
+          [
+            [
+              -0.3694348,
+              39.4989165
+            ],
+            [
+              -0.369307,
+              39.4991853
+            ],
+            [
+              -0.3689645,
+              39.4991038
+            ],
+            [
+              -0.3690933,
+              39.4988317
+            ],
+            [
+              -0.3694348,
+              39.4989165
+            ]
+          ]
+        ]
+      },
+      "id": "relation/2024883"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "relation/15877020",
+        "addr:city": "València",
+        "addr:housenumber": "35",
+        "addr:postcode": "46024",
+        "addr:street": "Carrer de les Fontilles",
+        "amenity": "library",
+        "building": "yes",
+        "name": "Biblioteca Municipal del Mar",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x7421",
+        "source": "http://www.valencia.es",
+        "type": "multipolygon"
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [
+                -0.3315655,
+                39.4487735
+              ],
+              [
+                -0.3315213,
+                39.4487086
+              ],
+              [
+                -0.3312298,
+                39.4488623
+              ],
+              [
+                -0.3312658,
+                39.4489048
+              ],
+              [
+                -0.3309489,
+                39.4490652
+              ],
+              [
+                -0.3310146,
+                39.4491427
+              ],
+              [
+                -0.3310671,
+                39.4491161
+              ],
+              [
+                -0.331087,
+                39.4491395
+              ],
+              [
+                -0.3311409,
+                39.4491118
+              ],
+              [
+                -0.3311215,
+                39.449089
+              ],
+              [
+                -0.3312217,
+                39.4490383
+              ],
+              [
+                -0.3312406,
+                39.4490606
+              ],
+              [
+                -0.3313465,
+                39.4490061
+              ],
+              [
+                -0.3313255,
+                39.4489814
+              ],
+              [
+                -0.3314781,
+                39.4489042
+              ],
+              [
+                -0.3314272,
+                39.4488442
+              ],
+              [
+                -0.3315655,
+                39.4487735
+              ]
+            ]
+          ],
+          [
+            [
+              [
+                -0.3309409,
+                39.4492142
+              ],
+              [
+                -0.330818,
+                39.4490698
+              ],
+              [
+                -0.3307405,
+                39.4491091
+              ],
+              [
+                -0.3308633,
+                39.4492536
+              ],
+              [
+                -0.3309409,
+                39.4492142
+              ]
+            ]
+          ]
+        ]
+      },
+      "id": "relation/15877020"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/11181009",
+        "addr:city": "València",
+        "addr:housenumber": "13",
+        "addr:postcode": "46010",
+        "addr:street": "Carrer de les Arts Gràfiques",
+        "air_conditioning": "yes",
+        "amenity": "library",
+        "building": "yes",
+        "building:levels": "4",
+        "email": "biblioteca@uv.es",
+        "internet_access": "yes",
+        "internet_access:fee": "no",
+        "internet_access:ssid": "Eduroam",
+        "name": "Biblioteca d'Humanitats Joan Reglà",
+        "name:ca": "Biblioteca d'Humanitats Joan Reglà",
+        "name:es": "Biblioteca de Humanidades Juan Reglá",
+        "name:etymology:wikidata": "Q11684978",
+        "opening_hours": "Mo-Fr 08:15-21:00; Sa-Su 09:00-21:00",
+        "operator": "Universitat de València",
+        "operator:type": "public",
+        "phone": "+34963864557",
+        "polling_station": "yes",
+        "wheelchair": "yes",
+        "wikidata": "Q85817913"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.3621764,
+              39.4768581
+            ],
+            [
+              -0.3619175,
+              39.4767821
+            ],
+            [
+              -0.3619146,
+              39.4767885
+            ],
+            [
+              -0.3617662,
+              39.4767449
+            ],
+            [
+              -0.3617693,
+              39.4767385
+            ],
+            [
+              -0.3615126,
+              39.4766625
+            ],
+            [
+              -0.361512,
+              39.4766637
+            ],
+            [
+              -0.3615033,
+              39.4766618
+            ],
+            [
+              -0.3614919,
+              39.4766613
+            ],
+            [
+              -0.3614825,
+              39.4766628
+            ],
+            [
+              -0.3614733,
+              39.476666
+            ],
+            [
+              -0.3614645,
+              39.4766709
+            ],
+            [
+              -0.3614578,
+              39.476677
+            ],
+            [
+              -0.361453,
+              39.4766842
+            ],
+            [
+              -0.3614509,
+              39.4766919
+            ],
+            [
+              -0.3614506,
+              39.4767004
+            ],
+            [
+              -0.3614524,
+              39.4767078
+            ],
+            [
+              -0.3614576,
+              39.4767158
+            ],
+            [
+              -0.361463,
+              39.4767219
+            ],
+            [
+              -0.3614706,
+              39.4767263
+            ],
+            [
+              -0.3614799,
+              39.4767298
+            ],
+            [
+              -0.3614002,
+              39.4768936
+            ],
+            [
+              -0.3615189,
+              39.4769291
+            ],
+            [
+              -0.3615149,
+              39.4769374
+            ],
+            [
+              -0.3616522,
+              39.4769781
+            ],
+            [
+              -0.3616469,
+              39.4769905
+            ],
+            [
+              -0.3617957,
+              39.4770338
+            ],
+            [
+              -0.3618013,
+              39.4770223
+            ],
+            [
+              -0.3619396,
+              39.4770629
+            ],
+            [
+              -0.3619441,
+              39.4770556
+            ],
+            [
+              -0.3620634,
+              39.4770905
+            ],
+            [
+              -0.3621431,
+              39.4769256
+            ],
+            [
+              -0.3621554,
+              39.4769278
+            ],
+            [
+              -0.362166,
+              39.4769278
+            ],
+            [
+              -0.3621756,
+              39.4769257
+            ],
+            [
+              -0.3621843,
+              39.4769226
+            ],
+            [
+              -0.3621918,
+              39.4769179
+            ],
+            [
+              -0.3621976,
+              39.4769128
+            ],
+            [
+              -0.3622023,
+              39.4769056
+            ],
+            [
+              -0.3622054,
+              39.476897
+            ],
+            [
+              -0.3622053,
+              39.4768887
+            ],
+            [
+              -0.3622029,
+              39.476881
+            ],
+            [
+              -0.3621986,
+              39.476874
+            ],
+            [
+              -0.3621924,
+              39.4768676
+            ],
+            [
+              -0.3621839,
+              39.4768623
+            ],
+            [
+              -0.362176,
+              39.4768592
+            ],
+            [
+              -0.3621764,
+              39.4768581
+            ]
+          ]
+        ]
+      },
+      "id": "way/11181009"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/13077887",
+        "addr:city": "València",
+        "addr:postcode": "46015",
+        "addr:street": "Calle dels Xiprers",
+        "amenity": "library",
+        "building": "yes",
+        "name": "Biblioteca Municipal Juan de Timoneda",
+        "name:etymology:wikidata": "Q2331470",
+        "nohousenumber": "yes",
+        "operator": "Ajuntament de València",
+        "phone": "+34 96 340 08 96"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.4056921,
+              39.494811
+            ],
+            [
+              -0.4057191,
+              39.4947962
+            ],
+            [
+              -0.4057233,
+              39.4947469
+            ],
+            [
+              -0.4057815,
+              39.494747
+            ],
+            [
+              -0.4059837,
+              39.4947539
+            ],
+            [
+              -0.405986,
+              39.4946807
+            ],
+            [
+              -0.4060088,
+              39.4946715
+            ],
+            [
+              -0.405916,
+              39.4945444
+            ],
+            [
+              -0.405601,
+              39.4946856
+            ],
+            [
+              -0.4056921,
+              39.494811
+            ]
+          ]
+        ]
+      },
+      "id": "way/13077887"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/15218692",
+        "amenity": "library",
+        "building": "yes",
+        "level": "1",
+        "name": "Biblioteca Pública de València. Pilar Faus",
+        "name:ca": "Biblioteca Pública de València. Pilar Faus",
+        "name:es": "Biblioteca Pública de Valencia. Pilar Faus",
+        "opening_hours": "Mo-Fr 09:00-20:30",
+        "wikidata": "Q4687025",
+        "wikipedia": "ca:Biblioteca Pública de València"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.3817719,
+              39.4700858
+            ],
+            [
+              -0.3817012,
+              39.4702474
+            ],
+            [
+              -0.3813279,
+              39.4701543
+            ],
+            [
+              -0.3812836,
+              39.4702527
+            ],
+            [
+              -0.3814921,
+              39.4703124
+            ],
+            [
+              -0.3814599,
+              39.4703901
+            ],
+            [
+              -0.3816221,
+              39.4704334
+            ],
+            [
+              -0.3815345,
+              39.4706415
+            ],
+            [
+              -0.381671,
+              39.4706763
+            ],
+            [
+              -0.3817985,
+              39.4703899
+            ],
+            [
+              -0.382173,
+              39.4704818
+            ],
+            [
+              -0.3822147,
+              39.4703812
+            ],
+            [
+              -0.3818442,
+              39.4702854
+            ],
+            [
+              -0.3819104,
+              39.4701203
+            ],
+            [
+              -0.3818438,
+              39.4701051
+            ],
+            [
+              -0.3817719,
+              39.4700858
+            ]
+          ]
+        ]
+      },
+      "id": "way/15218692"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/23396711",
+        "amenity": "library",
+        "building": "yes",
+        "internet_access": "yes",
+        "name": "Biblioteca de Ciències Socials \"Gregori Maians\"",
+        "name:ca": "Biblioteca de Ciències Socials \"Gregori Maians\"",
+        "name:es": "Biblioteca de Ciencias Sociales \"Gregorio Maians\"",
+        "operator": "Universitat de València",
+        "operator:type": "public",
+        "wikidata": "Q85817908"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.3416891,
+              39.4778371
+            ],
+            [
+              -0.3417761,
+              39.4776565
+            ],
+            [
+              -0.3416908,
+              39.477631
+            ],
+            [
+              -0.3417462,
+              39.4775159
+            ],
+            [
+              -0.3418077,
+              39.4773833
+            ],
+            [
+              -0.3418949,
+              39.4774073
+            ],
+            [
+              -0.3419814,
+              39.477228
+            ],
+            [
+              -0.3418176,
+              39.4771819
+            ],
+            [
+              -0.3417696,
+              39.4772821
+            ],
+            [
+              -0.3414222,
+              39.4771803
+            ],
+            [
+              -0.3414682,
+              39.4770809
+            ],
+            [
+              -0.3413876,
+              39.4770595
+            ],
+            [
+              -0.3413294,
+              39.4771784
+            ],
+            [
+              -0.3412648,
+              39.4773093
+            ],
+            [
+              -0.341308,
+              39.4773215
+            ],
+            [
+              -0.3412584,
+              39.4774266
+            ],
+            [
+              -0.3412166,
+              39.4774147
+            ],
+            [
+              -0.3411517,
+              39.477547
+            ],
+            [
+              -0.3410941,
+              39.4776654
+            ],
+            [
+              -0.3411763,
+              39.477688
+            ],
+            [
+              -0.3412232,
+              39.4775864
+            ],
+            [
+              -0.3415725,
+              39.4776889
+            ],
+            [
+              -0.3415239,
+              39.4777906
+            ],
+            [
+              -0.3416891,
+              39.4778371
+            ]
+          ]
+        ]
+      },
+      "id": "way/23396711"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/147064472",
+        "amenity": "library",
+        "building": "yes",
+        "name": "Biblioteca Municipal Joaquim Martí i Gadea",
+        "operator": "Ajuntament de València",
+        "source": "www.bmvalencia.org"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.3607438,
+              39.4562657
+            ],
+            [
+              -0.3605783,
+              39.4560318
+            ],
+            [
+              -0.3602177,
+              39.4561839
+            ],
+            [
+              -0.3600592,
+              39.4562507
+            ],
+            [
+              -0.3602247,
+              39.4564847
+            ],
+            [
+              -0.3607438,
+              39.4562657
+            ]
+          ]
+        ]
+      },
+      "id": "way/147064472"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/149495204",
+        "addr:street": "Carrer de Ramon Llull",
+        "amenity": "library",
+        "building": "yes",
+        "contact:phone": "+34 963 86 44 88",
+        "name": "Biblioteca d'Educació María Moliner",
+        "name:etymology:wikidata": "Q465162",
+        "opening_hours": "Mo-Fr 08:30-21:00; PH,Sa,Su off",
+        "operator": "Universitat de València",
+        "toilets": "yes",
+        "wheelchair": "yes",
+        "wikidata": "Q85817911"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.3463165,
+              39.4793567
+            ],
+            [
+              -0.3463965,
+              39.4791894
+            ],
+            [
+              -0.3463839,
+              39.4791858
+            ],
+            [
+              -0.3464038,
+              39.4791424
+            ],
+            [
+              -0.3463048,
+              39.4791137
+            ],
+            [
+              -0.346339,
+              39.4790428
+            ],
+            [
+              -0.346035,
+              39.4789555
+            ],
+            [
+              -0.3460008,
+              39.4790264
+            ],
+            [
+              -0.3459471,
+              39.4790115
+            ],
+            [
+              -0.3458881,
+              39.4791385
+            ],
+            [
+              -0.3458784,
+              39.4791595
+            ],
+            [
+              -0.345903,
+              39.4791669
+            ],
+            [
+              -0.3458795,
+              39.4792187
+            ],
+            [
+              -0.34621,
+              39.4793149
+            ],
+            [
+              -0.3462052,
+              39.479325
+            ],
+            [
+              -0.3463165,
+              39.4793567
+            ]
+          ]
+        ]
+      },
+      "id": "way/149495204"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/236139285",
+        "addr:city": "València",
+        "addr:housenumber": "64",
+        "addr:postcode": "46035",
+        "addr:street": "Carrer del Campament",
+        "amenity": "library",
+        "barrier": "fence",
+        "building": "yes",
+        "building:colour": "#efbb87",
+        "building:levels": "1",
+        "email": "bteodorllorente@valencia.es",
+        "fence_type": "concrete",
+        "name": "Biblioteca Municipal Teodoro Llorente",
+        "note": "Horario aproximado. Puede encontrarse un horario detallado en su página web.",
+        "opening_hours": "Mo 08:45-14:45,16:15-19:45; Tu 16:15-19:45; We,Th 08:45-14:45; week 03-15/2,week 20-25/2,week 40-50/2 Fr 08:45-14:45; week 02-16/2,week 19-25/2,week 41-49/2 Fr 16:15-19:45; PH off; Mar 14,Mar 21,Oct 24 off; Feb 08,Apr 05,Jun 07,Nov 08 09:30-13:30",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34 96 364 29 96",
+        "roof:colour": "#eb7856",
+        "website": "https://www.valencia.es/-/infociudad-biblioteca-municipal-de-benim%C3%80met-teodor-llorente-val"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.4239668,
+              39.5018809
+            ],
+            [
+              -0.4238953,
+              39.5017771
+            ],
+            [
+              -0.4238863,
+              39.5017759
+            ],
+            [
+              -0.4238423,
+              39.5017939
+            ],
+            [
+              -0.423819,
+              39.5018034
+            ],
+            [
+              -0.4238005,
+              39.5018109
+            ],
+            [
+              -0.4237524,
+              39.5018306
+            ],
+            [
+              -0.423748,
+              39.5018368
+            ],
+            [
+              -0.4238237,
+              39.5019441
+            ],
+            [
+              -0.423832,
+              39.5019438
+            ],
+            [
+              -0.4239641,
+              39.5018884
+            ],
+            [
+              -0.4239668,
+              39.5018809
+            ]
+          ]
+        ]
+      },
+      "id": "way/236139285"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/460433987",
+        "addr:city": "València",
+        "addr:country": "ES",
+        "addr:district": "Algirós",
+        "addr:housenumber": "12",
+        "addr:postcode": "46021",
+        "addr:province": "València",
+        "addr:street": "Carrer de Iecla",
+        "addr:subdistrict": "l'Amistat",
+        "alt_name": "Biblioteca de l’Amistat – Tomàs Vicent Tosca",
+        "amenity": "library",
+        "building": "public",
+        "building:levels": "3",
+        "email": "btomasvicent@valencia.es",
+        "name": "Biblioteca municipal de l'Amistat – Tomás Vicent Tosca",
+        "name:etymology:wikidata": "Q11704554",
+        "official_name": "Biblioteca municipal de l'Amistat - Tomás Vicent Tosca",
+        "opening_hours": "Mo-Fr 08:45-14:45,16:15-19:45",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34962082739",
+        "source": "https://www.valencia.es/ayuntamiento/infociudad_accesible.nsf/vDocumentosWebListado/1497BE55AEFC1726C12572C20023B78A?OpenDocument&bdOrigen=ayuntamiento/cultura.nsf&idapoyo=&nivel=6_2&lang=1",
+        "website": "https://www.valencia.es/-/infociutat-biblioteca-municipal-tomas-vicent-tosca-algiros-/-de-la-amistad-"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.3514175,
+              39.4722684
+            ],
+            [
+              -0.3507828,
+              39.4720866
+            ],
+            [
+              -0.3507647,
+              39.4721251
+            ],
+            [
+              -0.3507446,
+              39.4721198
+            ],
+            [
+              -0.3506205,
+              39.4723804
+            ],
+            [
+              -0.3506022,
+              39.4724188
+            ],
+            [
+              -0.3507798,
+              39.4724705
+            ],
+            [
+              -0.3507944,
+              39.4724416
+            ],
+            [
+              -0.3509008,
+              39.4722307
+            ],
+            [
+              -0.3509273,
+              39.4722405
+            ],
+            [
+              -0.3509485,
+              39.4722509
+            ],
+            [
+              -0.3509689,
+              39.4722628
+            ],
+            [
+              -0.3509981,
+              39.472281
+            ],
+            [
+              -0.3510191,
+              39.4722943
+            ],
+            [
+              -0.3510417,
+              39.4723053
+            ],
+            [
+              -0.3510708,
+              39.4723152
+            ],
+            [
+              -0.3511122,
+              39.472325
+            ],
+            [
+              -0.3511442,
+              39.4723294
+            ],
+            [
+              -0.3511769,
+              39.4723296
+            ],
+            [
+              -0.3512109,
+              39.4723269
+            ],
+            [
+              -0.3512457,
+              39.4723211
+            ],
+            [
+              -0.3512797,
+              39.4723124
+            ],
+            [
+              -0.3513791,
+              39.4722807
+            ],
+            [
+              -0.3514175,
+              39.4722684
+            ]
+          ]
+        ]
+      },
+      "id": "way/460433987"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/499554039",
+        "addr:city": "València",
+        "addr:housenumber": "1",
+        "addr:postcode": "46008",
+        "addr:street": "Carrer del Pare Manjón",
+        "amenity": "library",
+        "building": "yes",
+        "name": "Biblioteca Municipal María Beneyto",
+        "name:etymology:wikidata": "Q3392901",
+        "operator": "Ajuntament de València",
+        "phone": "+34 96 392 28 07",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.3848117,
+              39.4768479
+            ],
+            [
+              -0.3847873,
+              39.4766449
+            ],
+            [
+              -0.3844761,
+              39.476609
+            ],
+            [
+              -0.3844441,
+              39.4768049
+            ],
+            [
+              -0.3848117,
+              39.4768479
+            ]
+          ]
+        ]
+      },
+      "id": "way/499554039"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/512390410",
+        "addr:city": "València",
+        "addr:housenumber": "1",
+        "addr:postcode": "46018",
+        "addr:street": "Plaça de Magúncia",
+        "amenity": "library",
+        "building": "yes",
+        "name": "Biblioteca Municipal Lluís Fullana i Mira",
+        "name:ca": "Biblioteca Municipal Lluís Fullana i Mira",
+        "name:etymology:wikidata": "Q3257555",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x4585",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.4021229,
+              39.4650503
+            ],
+            [
+              -0.4020582,
+              39.4652574
+            ],
+            [
+              -0.4019801,
+              39.4655076
+            ],
+            [
+              -0.4022258,
+              39.4655533
+            ],
+            [
+              -0.4023686,
+              39.465096
+            ],
+            [
+              -0.4021229,
+              39.4650503
+            ]
+          ]
+        ]
+      },
+      "id": "way/512390410"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/587718541",
+        "amenity": "library",
+        "building": "yes",
+        "building:levels": "1",
+        "name": "Biblioteca Municipal Carmelita Sánchez-Cutillas",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x3601",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.3874786,
+              39.4942893
+            ],
+            [
+              -0.3874187,
+              39.4941325
+            ],
+            [
+              -0.3870248,
+              39.4942219
+            ],
+            [
+              -0.3870586,
+              39.4943127
+            ],
+            [
+              -0.3871031,
+              39.4944322
+            ],
+            [
+              -0.3873266,
+              39.4943809
+            ],
+            [
+              -0.3873067,
+              39.4943287
+            ],
+            [
+              -0.3874786,
+              39.4942893
+            ]
+          ]
+        ]
+      },
+      "id": "way/587718541"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1096701416",
+        "amenity": "library",
+        "building": "yes"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.3694345,
+              39.4808284
+            ],
+            [
+              -0.3693794,
+              39.4808119
+            ],
+            [
+              -0.3693246,
+              39.4807955
+            ],
+            [
+              -0.369296,
+              39.4808524
+            ],
+            [
+              -0.3692203,
+              39.481003
+            ],
+            [
+              -0.3693303,
+              39.4810359
+            ],
+            [
+              -0.3694345,
+              39.4808284
+            ]
+          ]
+        ]
+      },
+      "id": "way/1096701416"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "way/1246190495",
+        "amenity": "library",
+        "building": "yes",
+        "name": "Biblioteca del Orriols Josep Maria Bayarri",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "website": "https://xlpv.gva.es/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -0.368533,
+              39.4970802
+            ],
+            [
+              -0.3685441,
+              39.4970624
+            ],
+            [
+              -0.368627,
+              39.4969296
+            ],
+            [
+              -0.3684991,
+              39.4968814
+            ],
+            [
+              -0.368401,
+              39.4970336
+            ],
+            [
+              -0.368533,
+              39.4970802
+            ]
+          ]
+        ]
+      },
+      "id": "way/1246190495"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/1703016479",
+        "addr:city": "València",
+        "addr:housenumber": "34",
+        "addr:postcode": "46023",
+        "addr:street": "Carrer de Trafalgar",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Gregori Mayans i Ciscar",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x2735",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3452861,
+          39.461124
+        ]
+      },
+      "id": "node/1703016479"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/1719274668",
+        "addr:city": "València",
+        "addr:housenumber": "16",
+        "addr:postcode": "46017",
+        "addr:street": "Carrer del Castell de Cullera",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Joan Churat i Saurí",
+        "operator": "Ajuntament de València",
+        "phone": "+34 96 329 20 86",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3929396,
+          39.4343112
+        ]
+      },
+      "id": "node/1719274668"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/1981173589",
+        "addr:city": "València",
+        "addr:housename": "Parc de Marxalenes",
+        "addr:postcode": "46009",
+        "addr:street": "Carrer de Reus",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Joanot Martorell",
+        "nohousenumber": "yes",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34 96 348 32 69",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3811579,
+          39.4863998
+        ]
+      },
+      "id": "node/1981173589"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/1983118056",
+        "addr:city": "València",
+        "addr:housenumber": "32",
+        "addr:postcode": "46020",
+        "addr:street": "Carrer de Francesc Martínez",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Carola Reig Salvá",
+        "name:etymology:wikidata": "Q23010210",
+        "opening_hours": "Mo-Fr 08:45-14:45,16:15-19:45",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x4302",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3581242,
+          39.4881253
+        ]
+      },
+      "id": "node/1983118056"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441476728",
+        "addr:city": "València",
+        "addr:housenumber": "8",
+        "addr:postcode": "46024",
+        "addr:street": "Carrer de Méndez Núñez",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Grau-Port",
+        "name:ca": "Biblioteca Municipal Grau-Port",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x7383",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3395564,
+          39.4599213
+        ]
+      },
+      "id": "node/2441476728"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441476730",
+        "addr:city": "València",
+        "addr:housenumber": "24",
+        "addr:postcode": "46025",
+        "addr:street": "Carrer del Ninot",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Vicent Tortosa i Biosca",
+        "operator": "Ajuntament de València",
+        "phone": "+34 96 193 50 64",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3926563,
+          39.5000885
+        ]
+      },
+      "id": "node/2441476730"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441476731",
+        "addr:city": "València",
+        "addr:housenumber": "6",
+        "addr:postcode": "46024",
+        "addr:street": "Carrer de Peris Brell",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Vicent Casp i Verger",
+        "operator": "Ajuntament de València",
+        "phone": "+34 96 330 14 73",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3474621,
+          39.4646394
+        ]
+      },
+      "id": "node/2441476731"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441476749",
+        "addr:city": "València",
+        "addr:housename": "Palau de l'Exposició",
+        "addr:housenumber": "1",
+        "addr:postcode": "46010",
+        "addr:street": "Carrer de Galícia",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Palau de l'Exposició",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x4491",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3624784,
+          39.4735879
+        ]
+      },
+      "id": "node/2441476749"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441494865",
+        "addr:city": "València",
+        "addr:housename": "Complex Esportiu-Cultural Petxina",
+        "addr:housenumber": "42",
+        "addr:postcode": "46008",
+        "addr:street": "Passeig de la Petxina",
+        "amenity": "library",
+        "name": "Biblioteca Municipal de la Petxina",
+        "name:es": "Biblioteca Municipal de la Pechina",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x2784",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.394262,
+          39.4752164
+        ]
+      },
+      "id": "node/2441494865"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441641881",
+        "addr:city": "València",
+        "addr:housenumber": "3",
+        "addr:postcode": "46015",
+        "addr:street": "Carrer de Miquel Navarro",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Francesc Almela i Vives",
+        "operator": "Ajuntament de València",
+        "phone": "+34 96 348 27 71",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.4009189,
+          39.4802366
+        ]
+      },
+      "id": "node/2441641881"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441641900",
+        "addr:city": "València",
+        "addr:housenumber": "19",
+        "addr:postcode": "46011",
+        "addr:street": "Carrer del Doctor Josep Juan Dòmine",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Constantí Llombart",
+        "opening_hours": "Mo-Fr 08:45-14:45, Sa 09:30-13:29, Mo-Fr 16:15-19:45",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x4298"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3306416,
+          39.4626595
+        ]
+      },
+      "id": "node/2441641900"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441974441",
+        "addr:city": "València",
+        "addr:housenumber": "85",
+        "addr:postcode": "46011",
+        "addr:street": "Carrer de la Reina",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Casa de la Reina",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34 96 371 52 92",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3289691,
+          39.4674645
+        ]
+      },
+      "id": "node/2441974441"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441998681",
+        "addr:city": "València",
+        "addr:housenumber": "52",
+        "addr:postcode": "46026",
+        "addr:street": "Carrer de l'Illa Cabrera",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Roiç de Corella",
+        "name:ca": "Biblioteca Municipal Roiç de Corella",
+        "opening_hours": "Mo-Fr 08:45-14:45,16:15-19:45",
+        "operator": "Ajuntament de València",
+        "phone": "+34 96 373 75 33",
+        "source": "http://www.valencia.es",
+        "wikidata": "Q85818150"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3774724,
+          39.4487117
+        ]
+      },
+      "id": "node/2441998681"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441998682",
+        "addr:city": "València",
+        "addr:city:ca": "València",
+        "addr:housenumber": "2",
+        "addr:postcode": "46006",
+        "addr:street": "Carrer del Poeta Al-Russafi",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Nova Al-Russafí",
+        "name:es": "Biblioteca Municipal Nueva Al-Russafi",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x4292",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3706941,
+          39.4609316
+        ]
+      },
+      "id": "node/2441998682"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441998683",
+        "addr:city": "València",
+        "addr:housenumber": "9",
+        "addr:postcode": "46021",
+        "addr:street": "Carrer del Serpis",
+        "amenity": "library",
+        "internet_access": "wlan",
+        "internet_access:fee": "no",
+        "name": "Biblioteca Municipal María Moliner",
+        "name:etymology:wikidata": "Q465162",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34 96 393 13 33",
+        "source": "http://www.valencia.es",
+        "wheelchair": "yes"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3491314,
+          39.4762495
+        ]
+      },
+      "id": "node/2441998683"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2441998684",
+        "addr:city": "València",
+        "addr:housenumber": "35",
+        "addr:postcode": "46025",
+        "addr:street": "Carrer Doménec Gómez",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Isabel de Villena",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x7350",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3821432,
+          39.4924326
+        ]
+      },
+      "id": "node/2441998684"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2442131158",
+        "addr:housenumber": "18",
+        "addr:postcode": "46007",
+        "addr:street": "Avinguda de Giorgeta",
+        "amenity": "library",
+        "check_date": "2026-02-17",
+        "email": "bgermanadefoix@valencia.es",
+        "level": "1",
+        "name": "Biblioteca Municipal Germana de Foix",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34 96 342 27 44",
+        "source": "http://www.valencia.es",
+        "website": "https://cultural.valencia.es/biblioteca/biblioteca-de-la-raiosa-germana-de-foix/"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.385772,
+          39.46038
+        ]
+      },
+      "id": "node/2442131158"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2442131160",
+        "addr:city": "València",
+        "addr:housename": "Complex cultural La Rambleta",
+        "addr:housenumber": "2",
+        "addr:postcode": "46017",
+        "addr:street": "Carrer de Pius IX",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Clara Santiró i Font",
+        "opening_hours": "Mo-Fr 08:45-14:45",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x2718",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.392672,
+          39.4472428
+        ]
+      },
+      "id": "node/2442131160"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2442131161",
+        "addr:city": "València",
+        "addr:housename": "Centre deportiu i cultural de Patraix",
+        "addr:postcode": "46018",
+        "addr:street": "Carrer de l'Assagador de les Monges",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Azorín",
+        "nohousenumber": "yes",
+        "operator": "Ajuntament de València",
+        "phone": "+34 96 357 76 94"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3930536,
+          39.4602344
+        ]
+      },
+      "id": "node/2442131161"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2442131162",
+        "addr:city": "València",
+        "addr:housenumber": "12",
+        "addr:postcode": "46014",
+        "addr:street": "Carrer de l'Escultor Salzillo",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Vicent Boix i Ricarte",
+        "name:es": "Biblioteca Municipal Vicente Boix y Ricarte",
+        "operator": "Ajuntament de València",
+        "phone": "+34 96 379 15 23",
+        "source": "http://www.valencia.es"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.4092612,
+          39.4660039
+        ]
+      },
+      "id": "node/2442131162"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/2508528732",
+        "addr:city": "València",
+        "addr:housename": "Complex esportiu-cultural Abastos",
+        "addr:housenumber": "18",
+        "addr:postcode": "46008",
+        "addr:street": "Carrer d'Alberic",
+        "amenity": "library",
+        "contact:email": "beduardescalante@valencia.es",
+        "internet_access": "wlan",
+        "internet_access:fee": "no",
+        "loc_name": "Biblioteca d'Abastos",
+        "name": "Biblioteca Municipal Eduard Escalant",
+        "opening_hours": "Sep 30-Jun 22: Mo-Fr 08:45-14:45,16:15-19:45; PH,Su off; Aug off; Jun 23-Jul 31,Sep 01-Sep 29: 08:45-14:45",
+        "operator": "Ajuntament de València",
+        "phone": "+34 963 52 54 78",
+        "source": "http://www.valencia.es;local knowledge",
+        "toilets:access": "yes",
+        "wheelchair": "yes"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3880343,
+          39.4679589
+        ]
+      },
+      "id": "node/2508528732"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/3105348738",
+        "amenity": "library",
+        "name": "Biblioteca de ADE-Topografía",
+        "note": "Extensión telefónica es la siguiente: Ext.79926-78859",
+        "phone": "+34 963879926",
+        "wheelchair": "yes"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3369311,
+          39.4813678
+        ]
+      },
+      "id": "node/3105348738"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/4767738771",
+        "addr:housenumber": "3",
+        "addr:street": "Carrer de la Palma",
+        "amenity": "library",
+        "name": "Ateneu Llibertari Al Margen",
+        "website": "https://www.ateneoalmargen.org/"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3792374,
+          39.4785814
+        ]
+      },
+      "id": "node/4767738771"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/7133479583",
+        "amenity": "library",
+        "operator": "IES Benicalap"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3988239,
+          39.4961979
+        ]
+      },
+      "id": "node/7133479583"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/7651891322",
+        "amenity": "library",
+        "name": "Biblioteca Municipal de Trinitat Vivers"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3692772,
+          39.4809812
+        ]
+      },
+      "id": "node/7651891322"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/8721185454",
+        "addr:city": "València",
+        "addr:housenumber": "9",
+        "addr:postcode": "46003",
+        "addr:street": "Carrer de Nàquera",
+        "addr:unit": "B",
+        "air_conditioning": "yes",
+        "amenity": "library",
+        "description": "Centre bibliogràfic de la DG de l'Institut Valencià de les Dones",
+        "email": "biblioteca.dgmi_val@gva.es",
+        "image": "https://images.app.goo.gl/Urd4QQh1astVYmE57",
+        "internet_access": "wlan",
+        "internet_access:fee": "no",
+        "level": "0",
+        "name": "Biblioteca de la Dona",
+        "operator": "Institut Valencià de les Dones - ViCIPI - Generalitat Valenciana",
+        "operator:type": "government",
+        "wikidata": "Q85853463"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3760877,
+          39.4785022
+        ]
+      },
+      "id": "node/8721185454"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/10314671205",
+        "amenity": "library",
+        "name": "Biblioteca General",
+        "opening_hours": "Mo-Fr 08:00-21:00; Sa,Su 08:30-21:00"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3429392,
+          39.4811085
+        ]
+      },
+      "id": "node/10314671205"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/11380376098",
+        "amenity": "library",
+        "name": "Bibliomar",
+        "operator": "Ajuntament de València",
+        "phone": "+34 96 352 54 78",
+        "website": "https://www.valencia.es/cas/playas/bibliomar/-/content/bibliomar?uid=398B0A6F70C2C329C12574D600484A58"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3242599,
+          39.4809887
+        ]
+      },
+      "id": "node/11380376098"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/12643509601",
+        "addr:postcode": "46022",
+        "addr:street": "Camí de Vera",
+        "amenity": "library",
+        "email": "bibinformatica@bib.upv.es",
+        "internet_access": "wlan",
+        "name": "Biblioteca d'Informàtica i Documentació Enric Valor",
+        "opening_hours": "Mo-Fr 08:00-21:00",
+        "phone": "+34 963 87 81 30",
+        "website": "https://www.upv.es/entidades/abdc/biblioteca-de-informatica/"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3475188,
+          39.4831196
+        ]
+      },
+      "id": "node/12643509601"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/12898226775",
+        "addr:city": "València",
+        "addr:housenumber": "1",
+        "addr:postcode": "46001",
+        "addr:street": "Plaça de la Mare de Déu",
+        "amenity": "library",
+        "name": "Biblioteca Municipal Carles Ros",
+        "name:ca": "Biblioteca Municipal Carles Ros",
+        "name:es": "Biblioteca Municipal Carles Ros",
+        "operator": "Ajuntament de València",
+        "operator:type": "government",
+        "operator:wikidata": "Q26251945",
+        "phone": "+34963525478 x4508"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3754183,
+          39.4759828
+        ]
+      },
+      "id": "node/12898226775"
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "@id": "node/13019761430",
+        "amenity": "library",
+        "name": "Biblioteca de Psicologia i Esport Joan Lluís Vives",
+        "operator": "Universitat de València",
+        "operator:type": "university"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          -0.3594803,
+          39.4786519
+        ]
+      },
+      "id": "node/13019761430"
+    }
+  ]
+}
