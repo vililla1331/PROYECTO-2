@@ -1,0 +1,178 @@
+---
+title: "PROYECTO II"
+output: html_document
+date: "2026-02-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Cargar librerias necesarias:
+
+```{r}
+library(sf)
+library(dplyr)
+library(stringr)
+```
+
+### **1. PRIMER PASO: Transformar archivos .geojason a .csv**
+
+El primer paso va a ser pasar los archivos con formato .GeoJSON a formato .CSV
+
+Al extraer los datos de OpenStreetMap, las geometrías venían mezcladas (puntos y polígonos). Para poder unificarlas y calcular distancias en el análisis espacial posterior, aplicamos una transformación espacial (st_centroid()) para convertir todos los polígonos en puntos centrales, resolviendo así la inconsistencia del dataset original.
+
+Este mismo proceso lo realizaremos con todos las bases de datos que se encuentren en formato .GeoJSON
+
+```{r}
+# 1. Leer el archivo
+datos_bancos <- st_read("C:/Users/xabel/OneDrive/Escritorio/Universidad/SEGUNDO CURSO/2º CUATRI/PROYECTO II/CIUDAD 15 MIN/Datos Proyecto CIUDAD 15 MIN/DATOS ORIGINALES/bancos.geojson")  # Cambiamos el nombre del archivo que queramos transformar
+
+# 2. Convertir cualquier edificio (polígono) en un solo punto central
+# Nota: Es normal si te sale un 'Warning' rojo aquí sobre las proyecciones, ignóralo.
+datos_bancos_puntos <- st_centroid(datos_bancos)
+
+# 3. Ahora sí, extraemos las coordenadas (ya que todo son puntos)
+datos_bancos_listos <- datos_bancos_puntos %>%
+  mutate(
+    longitud = st_coordinates(.)[,1],
+    latitud = st_coordinates(.)[,2]
+  )
+
+# 4. Quitamos la geometría y guardamos el CSV
+datos_tabla <- st_drop_geometry(datos_bancos_listos)
+write.csv2(datos_tabla, "C:/Users/xabel/OneDrive/Escritorio/Universidad/SEGUNDO CURSO/2º CUATRI/PROYECTO II/CIUDAD 15 MIN/Datos Proyecto CIUDAD 15 MIN/DATOS ORIGINALES/bancos.csv", row.names = FALSE)  # Cambiamos al nuevo nombre del archivo transformado
+```
+### **2. SEGUNDO PASO: Eliminación de columnas no deseadas e imputación NAs (archivos OpenStreetMap)**
+
+El segundo paso es eliminar las columnas no necesarias para nuestros objetivos.
+
+La mayoría de estas columnas eliminadas eran metadatos de OpenStreetMap, variaciones de idiomas y datos históricos irrelevantes puesto que nuestro proyecto se centra en el presente.
+
+```{r}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_bancos <- read.csv2("C:/Users/xabel/OneDrive/Escritorio/Universidad/SEGUNDO CURSO/2º CUATRI/PROYECTO II/CIUDAD 15 MIN/Datos Proyecto CIUDAD 15 MIN/DATOS ORIGINALES/bancos.csv") # Cambiar nombre archivo al conveniente
+
+# 2. Seleccionar solo las columnas que nos interesan
+bancos_limpios <- datos_bancos %>%
+  select(
+    id,
+    name,
+    brand,
+    amenity,
+    atm,
+    addr.street,
+    addr.housenumber,
+    addr.postcode,
+    latitud,
+    longitud
+  )
+
+# 3. Limpieza extra: Rellenar nombres vacíos
+# Si un banco no tiene 'name' pero sí tiene 'brand', usamos la marca como nombre.
+bancos_limpios <- bancos_limpios %>%
+  mutate(name = ifelse(is.na(name) | name == "", brand, name))
+
+# 4. Ver el resultado (para asegurarnos de que ha quedado bien)
+head(bancos_limpios)
+
+# 5. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(bancos_limpios, "C:/Users/xabel/OneDrive/Escritorio/Universidad/SEGUNDO CURSO/2º CUATRI/PROYECTO II/CIUDAD 15 MIN/Datos Proyecto CIUDAD 15 MIN/DATOS LIMPIOS PROVISIONALES/bancos_limpio.csv", row.names = FALSE) # Cambiar nombre archivo al nuevo archivo limpio provisional
+```
+
+La limpieza de datos original requirió el manejo de un alto volumen de valores faltantes (NAs) derivados del web scraping de OpenStreetMap. Se optó por la imputación de valores lógicos en variables de interés (ej. asignando 'no' a la ausencia de la etiqueta 'atm') y se procedió a la eliminación de las columnas postales (addr.), priorizando las coordenadas exactas para el cálculo de distancias en los modelos espaciales.
+
+```{r}
+# 1. Cargar tus datos
+datos_bancos <- read.csv2("C:/Users/xabel/OneDrive/Escritorio/Universidad/SEGUNDO CURSO/2º CUATRI/PROYECTO II/CIUDAD 15 MIN/Datos Proyecto CIUDAD 15 MIN/DATOS LIMPIOS PROVISIONALES/bancos_limpio.csv") # Cambiar nombre archivo al conveniente
+
+# 2. Tratamiento de NAs
+bancos_procesados <- datos_bancos %>%
+  mutate(
+    # Reemplazar NAs en cajeros (asumimos que si no pone 'yes', es que 'no' tiene cajero exterior)
+    atm = ifelse(is.na(atm) | atm == "", "no", atm),
+  ) %>%
+  
+  # 3. Eliminar las columnas postales por tener exceso de NAs (usaremos lat/lon)
+  select(-addr.street, -addr.housenumber, -addr.postcode)
+
+# Ver el resultado sin NAs molestos
+head(bancos_procesados)
+
+# Guardar el archivo definitivo
+write.csv2(bancos_procesados, "C:/Users/xabel/OneDrive/Escritorio/Universidad/SEGUNDO CURSO/2º CUATRI/PROYECTO II/CIUDAD 15 MIN/Datos Proyecto CIUDAD 15 MIN/DATOS LIMPIOS DEFINITIVOS/bancos_limpio_definitivo.csv", row.names = FALSE) # Cambiar nombre archivo al nuevo nombre definitivo
+```
+
+*Limpieza especifica dataset bancos:*
+
+NOTA: explicar que hace cada cosa
+
+El análisis exploratorio de la variable 'nombre_banco' reveló la presencia de sesgos temporales o 'datos fantasma' procedentes de OpenStreetMap. Se identificaron múltiples entidades que desaparecieron o fueron absorbidas durante el proceso de reestructuración bancaria española (ej. Bancaja, CAM, CCM, Barclays). Ante la imposibilidad de verificar si el local físico sigue operando bajo la marca absorbente o si fue cerrado (dado el cierre masivo de sucursales en España), se tomó la decisión metodológica de eliminar estos registros. Además, se aplicó una estandarización de variables categóricas (ej. unificando 'La Caixa' bajo 'Caixabank') para asegurar la consistencia en el análisis. Este tratamiento exhaustivo maximiza la pureza de los datos y asegura que el mapa de accesibilidad a 15 minutos refleje la realidad urbana actual.
+
+```{r}
+datos_bancos <- read.csv2("C:/Users/xabel/OneDrive/Escritorio/Universidad/SEGUNDO CURSO/2º CUATRI/PROYECTO II/CIUDAD 15 MIN/Datos Proyecto CIUDAD 15 MIN/DATOS LIMPIOS PROVISIONALES/bancos_limpio.csv")
+
+# 2. Tratamiento de NAs
+bancos_procesados <- datos_bancos %>%
+  mutate(
+    # Reemplazar NAs en cajeros (asumimos que si no pone 'yes', es que 'no' tiene cajero exterior)
+    atm = ifelse(is.na(atm) | atm == "", "no", atm),
+  ) %>%
+  
+  # 3. Eliminar las columnas postales por tener exceso de NAs (usaremos lat/lon)
+  select(-addr.street, -addr.housenumber, -addr.postcode)
+
+bancos_actuales <- bancos_procesados %>%
+  # 1. Crear la columna unificada
+  mutate(
+    nombre_banco = ifelse(is.na(brand) | brand == "", name, brand)
+  ) %>%
+  
+  # 2. Aplicar todos los filtros de limpieza
+  filter(
+    # --- NUEVO: Eliminar filas donde no hay ni nombre ni marca ---
+    !is.na(nombre_banco),          # Que no sea un valor nulo (NA)
+    nombre_banco != "",            # Que no sea un texto vacío
+    
+    # --- Eliminar los "falsos positivos" (aseguradoras) ---
+    !grepl("Seguros", nombre_banco, ignore.case = TRUE),
+    !grepl("Mapfre", nombre_banco, ignore.case = TRUE),
+    !grepl("Mutua", nombre_banco, ignore.case = TRUE),
+    !grepl("Adeslas", nombre_banco, ignore.case = TRUE),
+    !grepl("Asisa", nombre_banco, ignore.case = TRUE)
+  ) %>%
+  
+  # 3. Borrar las columnas viejas
+  select(-name, -brand)
+
+bancos_depurados <- bancos_actuales %>%
+  # 2. Eliminar los bancos que ya no existen en España
+  filter(
+    !nombre_banco %in% c(
+      "Bancaja", 
+      "CAM", 
+      "Caja de Ahorros del Mediterráneo", 
+      "CCM", 
+      "Caja Castilla La Mancha", 
+      "Barclays", 
+      "Citybank",
+      "Edifici Banc de València"
+    )
+  ) %>%
+  
+  # 3. Unificar marcas que son la misma (para evitar duplicados en tus gráficos)
+  mutate(
+    nombre_banco = case_when(
+      nombre_banco == "La Caixa" ~ "Caixabank",
+      nombre_banco == "Santander" ~ "Banco Santander",
+      TRUE ~ nombre_banco # Si no es ninguna de las anteriores, la deja igual
+    )
+  )
+
+# Ver cuántos bancos "vivos" te han quedado realmente en Valencia
+nrow(bancos_depurados)
+
+# Guardar el archivo definitivo
+write.csv2(bancos_depurados, "C:/Users/xabel/OneDrive/Escritorio/Universidad/SEGUNDO CURSO/2º CUATRI/PROYECTO II/CIUDAD 15 MIN/Datos Proyecto CIUDAD 15 MIN/DATOS LIMPIOS DEFINITIVOS/bancos_limpio_definitivo.csv", row.names = FALSE)
+```
+
