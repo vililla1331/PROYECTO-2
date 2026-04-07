@@ -1,0 +1,163 @@
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(stringi)
+
+# --- 1. FUNCIÓN DE LIMPIEZA Y CARGA ---
+# Mantenemos esta función para asegurar que los nombres coincidan siempre
+limpiar_distritos <- function(x) {
+  x1 <- str_remove(x, "^[0-9]+\\.\\s+")
+  x2 <- stri_trans_general(x1, "Latin-ASCII")
+  x3 <- str_to_upper(x2)
+  x4 <- str_replace(x3, "POBLES", "POBLATS")
+  x_final <- str_trim(x4)
+  return(x_final)
+}
+
+servicios_raw <- read_csv2("C:/Users/vilil/OneDrive/Escritorio/UPV/2º Grado Ciencia de Datos/PROYECTO 2/dataset_global_servicios.csv")
+poblacion_raw <- read_xlsx("C:/Users/vilil/OneDrive/Escritorio/UPV/2º Grado Ciencia de Datos/PROYECTO 2/DATOS LIMPIOS DEFINITIVOS/Poblacion_por_edad.xlsx", skip = 2)
+
+# --- 2. PROCESAMIENTO DE POBLACIÓN (PASO A PASO) ---
+
+# Filtramos filas que empiezan por número (Distritos reales)
+poblacion_filt <- poblacion_raw[str_detect(poblacion_raw[[1]], "^\\s*[0-9]+"), ]
+
+# Limpiamos los nombres de los distritos
+poblacion_filt$distrito <- limpiar_distritos(poblacion_filt[[1]])
+
+# Agrupamos los tramos de edad (usamos rowSums para que sea legible)
+poblacion_filt$Jovenes  <- rowSums(poblacion_filt[, c("0 - 4", "5 - 9", "10 - 14", "15 - 19", "20 - 24")])
+poblacion_filt$Adultos  <- rowSums(poblacion_filt[, c("25 - 29", "30 -34", "35 - 39", "40 - 44", "45 - 49", "50 - 54", "55 - 59", "60 - 64")])
+poblacion_filt$Ancianos <- rowSums(poblacion_filt[, c("65 - 69", "70 - 74", "75 - 79", "80 - 84", "85 - 89", "≥ 90")])
+
+# Calculamos proporciones
+poblacion_filt$p_jov <- poblacion_filt$Jovenes / poblacion_filt$Total
+poblacion_filt$p_adu <- poblacion_filt$Adultos / poblacion_filt$Total
+poblacion_filt$p_anc <- poblacion_filt$Ancianos / poblacion_filt$Total
+
+# Calculamos Edad Media (Puntos medios de tramos)
+puntos_medios <- seq(2.5, 87.5, by = 5)
+suma_edades <- rowSums(poblacion_filt[, 3:20] * puntos_medios) + (poblacion_filt$`≥ 90` * 95)
+poblacion_filt$edad_media <- suma_edades / poblacion_filt$Total
+
+# Seleccionamos columnas finales
+poblacion_clean <- poblacion_filt[, c("distrito", "Total", "edad_media", "p_jov", "p_adu", "p_anc")]
+View(poblacion_clean)
+
+# --- 3. PROCESAMIENTO DE SERVICIOS Y MATRIZ ---
+
+# Limpiar nombres en servicios y contar
+servicios_raw$distrito <- limpiar_distritos(servicios_raw$distrito_asignado)
+conteo_servicios <- count(servicios_raw, distrito, tipo_servicio)
+
+# Matriz de pesos (Tribble es más cómodo, pero es una tabla estándar)
+pesos_servicios <- tribble(
+  ~tipo_servicio,        ~w_jov, ~w_adu, ~w_anc,
+  "Colegio",             1.0,    0.5,    0.1, "Universidad",         1.0,    0.3,    0.0,
+  "Farmacia",            0.2,    0.6,    1.0, "Hospital",            0.4,    0.7,    1.0,
+  "Banco",               0.1,    0.9,    1.0, "Supermercado",        0.5,    1.0,    0.8,
+  "Polideportivo",       1.0,    0.8,    0.4, "Biblioteca",          1.0,    0.6,    0.6,
+  "Parques Bomberos",    0.5,    0.5,    0.5, "Peluqueria",          0.3,    0.8,    1.0,
+  "Restaurante",         0.7,    1.0,    0.6, "Centro Comercial",    0.8,    0.9,    0.4,
+  "Comisaria",           0.5,    0.6,    0.7, "Monumento Turistico", 0.5,    0.5,    0.5,
+  "Parking",             0.2,    1.0,    0.4
+)
+
+# --- 4. CRUCE Y CÁLCULO DEL SCORE ---
+
+# Unión de tablas
+df_unido <- inner_join(conteo_servicios, poblacion_clean, by = "distrito")
+df_completo <- left_join(df_unido, pesos_servicios, by = "tipo_servicio")
+View(df_completo)
+
+# Cálculo de puntuación por cada fila (servicio-distrito)
+df_completo$puntuacion <- df_completo$n * (df_completo$p_jov * df_completo$w_jov + 
+                                           df_completo$p_adu * df_completo$w_adu + 
+                                           df_completo$p_anc * df_completo$w_anc)
+
+# Agregación final por distrito
+analisis_final <- aggregate(cbind(n, puntuacion) ~ distrito + edad_media + Total, 
+                            data = df_completo, FUN = sum)
+View(analisis_final)
+
+# Renombrar columnas tras el aggregate
+colnames(analisis_final)[4:5] <- c("total_servicios", "score_15min")
+
+# Cálculo final del índice
+analisis_final$score_por_1000_hab <- (analisis_final$score_15min / analisis_final$Total) * 1000
+
+# Ordenar resultados
+analisis_final <- analisis_final[order(-analisis_final$score_por_1000_hab), ]
+
+```
+
+Añadimos los factores de renta por unidad de consumo y el factor de salud autopercibida.
+```{r}
+library(tidyverse)
+library(readxl)
+library(stringi)
+
+# --- 1. PREPARACIÓN DE LOS DATOS DE RENTA ---
+# Leemos el Excel de renta. 
+# Si tu archivo tiene filas vacías al principio, asegúrate de que el skip sea el correcto.
+renta_raw <- read_xlsx("C:/Users/vilil/OneDrive/Escritorio/UPV/2º Grado Ciencia de Datos/PROYECTO 2/DATOS LIMPIOS DEFINITIVOS/datos_renta.xlsx", col_names = FALSE)
+colnames(renta_raw) <- c("distrito_id", "renta_unidad_consumo")
+
+# Extraemos el número del distrito
+renta_raw$num_distrito <- as.numeric(str_extract(renta_raw$distrito_id, "[0-9]{2}$"))
+renta_clean <- renta_raw[!is.na(renta_raw$num_distrito), ]
+
+# --- 2. PREPARACIÓN DE LOS DATOS DE SALUD ---
+salud_raw <- read_xlsx("C:/Users/vilil/OneDrive/Escritorio/UPV/2º Grado Ciencia de Datos/PROYECTO 2/DATOS LIMPIOS DEFINITIVOS/SM1_Salud autopercibida.xlsx")
+
+# PASO CLAVE: Renombramos las columnas para evitar errores con los espacios
+# Esto asigna nombres estándar a las 7 columnas del dataset de salud
+colnames(salud_raw) <- c("Indicador", "Territorio", "Anio", "Sexo", "Grupo_edad", "Nivel_estudios", "Salud_valor")
+
+# Ahora filtramos usando los nuevos nombres (sin puntos ni espacios)
+salud_filt <- salud_raw[salud_raw$Sexo == "Total" & 
+                        salud_raw$Grupo_edad == "Total" & 
+                        salud_raw$Nivel_estudios == "Total", ]
+
+# Limpieza del nombre del distrito
+salud_filt$distrito <- str_remove(salud_filt$Territorio, "Distrito ")
+salud_filt$distrito <- stri_trans_general(salud_filt$distrito, "Latin-ASCII")
+salud_filt$distrito <- str_to_upper(salud_filt$distrito)
+salud_filt$distrito <- str_replace(salud_filt$distrito, "POBLES", "POBLATS")
+salud_filt$distrito <- str_trim(salud_filt$distrito)
+
+# Seleccionamos solo Distrito y el valor de salud
+salud_clean <- salud_filt[, c("distrito", "Salud_valor")]
+
+# --- 3. INTEGRACIÓN FINAL (JOIN) ---
+
+# Tabla de nombres oficiales para el cruce con renta
+nombres_vlc <- data.frame(
+  num_distrito = 1:19,
+  distrito = c("CIUTAT VELLA", "L'EIXAMPLE", "EXTRAMURS", "CAMPANAR", "LA SAIDIA", 
+               "EL PLA DEL REAL", "L'OLIVERETA", "PATRAIX", "JESUS", "QUATRE CARRERES", 
+               "POBLATS MARITIMS", "CAMINS AL GRAU", "ALGIROS", "BENIMACLET", "RASCANYA", 
+               "BENICALAP", "POBLATS DEL NORD", "POBLATS DE L'OEST", "POBLATS DEL SUD")
+)
+
+# Cruzamos Renta con los nombres limpios
+renta_con_nombre <- merge(renta_clean, nombres_vlc, by = "num_distrito")
+
+# Unimos tu análisis de servicios con la renta
+df_intermedio <- merge(analisis_final, renta_con_nombre[, c("distrito", "renta_unidad_consumo")], by = "distrito")
+
+# Unimos con los datos de salud
+analisis_objetivo1 <- merge(df_intermedio, salud_clean, by = "distrito")
+
+# --- 4. ANÁLISIS DE CORRELACIÓN ---
+# Calculamos la relación entre Servicios, Renta y Salud
+cor_renta <- cor(analisis_objetivo1$score_por_1000_hab, analisis_objetivo1$renta_unidad_consumo)
+cor_salud <- cor(analisis_objetivo1$score_por_1000_hab, analisis_objetivo1$Salud_valor)
+
+# Mostramos resultados
+print(analisis_objetivo1)
+message("Correlación Servicios-Renta: ", round(cor_renta, 3))
+message("Correlación Servicios-Salud: ", round(cor_salud, 3))
+```
+Observaciones, el indicador de salud autopercibida se refiere a personas que declaran tener una salud "Regular", "Mala" o "Muy Mala". Por tanto a menor índice de salud autopercibida, más saludables se sienten las personas de un determinado distrito.
