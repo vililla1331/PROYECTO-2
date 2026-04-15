@@ -8,6 +8,7 @@ output:
 date: "2026-02-25"
 editor_options:
   chunk_output_type: console
+runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
