@@ -8,7 +8,6 @@ output:
 date: "2026-02-25"
 editor_options:
   chunk_output_type: console
-runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
@@ -1210,7 +1209,7 @@ paleta_clusters <- colorFactor(
 mapa_15min <- leaflet(data = distritos_mapa) %>%
   
   # Añadir el mapa base de las calles (tipo Google Maps)
-  addTiles() %>%
+  addProviderTiles(providers$Esri.WorldStreetMap) %>%
   
   # Añadir un círculo por cada distrito
   addCircleMarkers(
