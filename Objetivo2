@@ -1,0 +1,107 @@
+---
+title: "Objetivo2"
+output: html_document
+date: "2026-04-10"
+---
+```{r}
+# OBJETIVO 2: ACCESIBILIDAD Y DISTRIBUCIÓN DEL TRANSPORTE PÚBLICO
+#Librerías usadas para este Objetivo2
+library(tidyverse)
+library(readxl)
+library(stringi)
+
+
+# --- 1. CARGA Y AGRUPACIÓN DE DATOS DE TRANSPORTE ---
+transportes <- read_csv2("dataset_global_transporte.csv")
+
+#Se agrupa cada tipo de transporte en cada distrito
+conteo_transportes <- transportes %>%
+  group_by(distrito_asignado, tipo_servicio) %>%
+  summarise(total_paradas = n(), .groups = 'drop')
+
+#A partir de la tabla anterior, se crean las columnas de cada tipo de transporte para cada distrtio para facilitar su interpretación.
+transportes_tipos <- conteo_transportes %>%
+  pivot_wider(names_from = tipo_servicio, values_from = total_paradas, values_fill = list(total_paradas = 0)) %>%
+  # Se acortan los nombres de las columnas
+  rename(
+    EMT = `Parada EMT`,
+    FGV = `Entradas MetroValencia`,
+    Valenbisi = `Valenbisi`
+  ) %>%
+  #Y se calcula el total del numero de paradas de transporte en cada distrtito
+  mutate(Total_Transporte = EMT + FGV + Valenbisi)
+
+
+
+# --- 2. PREPARACIÓN DE DISTRITOS Y CRUCE CON POBLACIÓN ---
+# Usamos la misma función de limpieza del Objetivo 1 para asegurar consistencia
+limpiar_distritos <- function(x) {
+  x1 <- str_remove(x, "^[0-9]+\\.\\s+")
+  x2 <- stri_trans_general(x1, "Latin-ASCII")
+  x3 <- str_to_upper(x2)
+  x4 <- str_replace(x3, "POBLES", "POBLATS")
+  x_final <- str_trim(x4)
+  return(x_final)
+}
+
+transportes_tipos$distrito_limpio <- limpiar_distritos(transportes_tipos$distrito_asignado)
+
+#Cargamos los datos de la polacion y se limpian para tener solo el distrito y su total
+poblacion <- read_xlsx("C:/Users/david/OneDrive/Desktop/2ºGCD/PROY-II/PROY-II/Proyecto-II/DATOS LIMPIOS DEFINITIVOS/DATOS LIMPIOS DEFINITIVOS/Poblacion_por_edad.xlsx", skip = 2)
+poblacion_filt <- poblacion[str_detect(poblacion[[1]], "^\\s*[0-9]+"), ]
+poblacion_filt$distrito_limpio <- limpiar_distritos(poblacion_filt[[1]])
+poblacion_limp <- poblacion_filt %>% 
+  select(distrito_limpio, Total) %>%
+  distinct(distrito_limpio, .keep_all = TRUE)
+
+#Se unen los datasets de transporte y de poblacion segun el distrito
+densidad_transportes <- inner_join(transportes_tipos, poblacion_limp, by = "distrito_limpio")
+
+
+
+
+# --- 3. CREAMOS LAS VARIABLES DERIVADAS--- Para comparar la densidad de servicio sde transporte en cada distrtito segun su poblacion en un indice numerico.
+densidad_transportes <- densidad_transportes %>%
+  mutate(
+    densidad_EMT = (EMT / Total) * 1000,
+    densidad_FGV = (FGV / Total) * 1000,
+    densidad_Valenbisi = (Valenbisi / Total) * 1000,
+    densidad_Global_Transporte = (Total_Transporte / Total) * 1000
+  ) %>%
+  arrange(desc(densidad_Global_Transporte))
+
+View(densidad_transportes)
+
+
+# --- 4. VISUALIZACIÓN DE DATOS ---
+df_grafico <- densidad_transportes %>%
+  select(distrito_limpio, densidad_EMT, densidad_FGV, densidad_Valenbisi) %>%
+  pivot_longer(cols = starts_with("densidad_"), 
+               names_to = "Tipo_Transporte", 
+               values_to = "Densidad") %>%
+  mutate(Tipo_Transporte = str_remove(Tipo_Transporte, "densidad_"))
+
+# Orden de los distritos de mayor a menor en el gráfico
+df_grafico$distrito_limpio <- factor(df_grafico$distrito_limpio, levels = densidad_transportes$distrito_limpio)
+
+# Creamos el gráfico de barras apiladas
+grafico_movilidad <- ggplot(df_grafico, aes(y = distrito_limpio, x = Densidad, fill = Tipo_Transporte)) +
+  geom_col() +
+  scale_fill_manual(values = c("EMT" = "#E3120B", "FGV" = "#F2A900", "Valenbisi" = "#00A550")) +
+  labs(
+    title = "Accesibilidad al Transporte Público en València",
+    subtitle = "Paradas y estaciones por cada 1.000 habitantes (Modelo 15 min)",
+    y = "Distrito",  # Ojo, ahora la Y es el distrito
+    x = "Densidad de Transporte (por 1.000 hab.)", # Y la X es la densidad
+    fill = "Servicio"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.y = element_text(size = 9)
+  )
+
+# Mostramos el gráfico
+print(grafico_movilidad)
+```
