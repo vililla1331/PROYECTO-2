@@ -51,17 +51,19 @@ View(poblacion_clean)
 servicios_raw$distrito <- limpiar_distritos(servicios_raw$distrito_asignado)
 conteo_servicios <- count(servicios_raw, distrito, tipo_servicio)
 
+
 # Matriz de pesos (Tribble es más cómodo, pero es una tabla estándar)
+# le ponemos ponderación 0 a los servicios de "parque de bomberos" porque no es viable la idea de que haya un parque de Bomberos cada 15 minutos
 pesos_servicios <- tribble(
   ~tipo_servicio,        ~w_jov, ~w_adu, ~w_anc,
-  "Colegio",             1.0,    0.5,    0.1, "Universidad",         1.0,    0.3,    0.0,
-  "Farmacia",            0.2,    0.6,    1.0, "Hospital",            0.4,    0.7,    1.0,
-  "Banco",               0.1,    0.9,    1.0, "Supermercado",        0.5,    1.0,    0.8,
-  "Polideportivo",       1.0,    0.8,    0.4, "Biblioteca",          1.0,    0.6,    0.6,
-  "Parques Bomberos",    0.5,    0.5,    0.5, "Peluqueria",          0.3,    0.8,    1.0,
-  "Restaurante",         0.7,    1.0,    0.6, "Centro Comercial",    0.8,    0.9,    0.4,
-  "Comisaria",           0.5,    0.6,    0.7, "Monumento Turistico", 0.5,    0.5,    0.5,
-  "Parking",             0.2,    1.0,    0.4
+  "Colegio",             1.0,    0.5,    0.1, "Universidad",         1.0,    0.5,    0.1,
+  "Farmacia",            0.2,    0.8,    1.0, "Hospital",            0.5,    0.8,    1.0,
+  "Banco",               0.1,    1.0,    0.8, "Supermercado",        0.5,    1.0,    1.0,
+  "Polideportivo",       1.0,    0.8,    0.5, "Biblioteca",          1.0,    0.5,    0.2,
+  "Parques Bomberos",    0.1,    0.1,    0.1, "Peluqueria",          0.5,    0.5,    0.5,
+  "Restaurante",         0.5,    0.8,    0.6, "Centro Comercial",    1.0,    0.8,    0.5,
+  "Comisaria",           0.5,    0.5,    0.5, "Monumento Turistico", 0.5,    0.5,    0.5,
+  "Parking",             0.2,    1.0,    0.5
 )
 
 # --- 4. CRUCE Y CÁLCULO DEL SCORE ---
