@@ -1472,8 +1472,8 @@ mapa_filtros <- leaflet(data = servicios) %>%
     options = layersControlOptions(collapsed = FALSE)
   ) %>%
 
-  # Ocultar las rutas por defecto
-  hideGroup(c("Rutas Autobús EMT", "Líneas Metrovalencia"))
+  # Ocultar las rutasy servicios por defecto para elegir los deseados
+  hideGroup(c(servicios$tipo_servicio,"Rutas Autobús EMT", "Líneas Metrovalencia"))
 
 # Mostrar el mapa
 mapa_filtros
