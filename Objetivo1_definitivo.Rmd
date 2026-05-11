@@ -1,0 +1,344 @@
+---
+title: "Objetivo 1 — Servicios esenciales, renta y salud por distrito en Valencia"
+author: "Daniel Vila Vega, David Cámara Gil, Xavier Bellver Fernandez"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+---
+
+# 1. Carga de librerías y datos
+
+## 1.1 Librerías
+
+```{r librerias, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(stringi)
+library(ggplot2)
+library(ggrepel)
+```
+
+## 1.2 Función auxiliar de limpieza de nombres de distrito
+
+```{r funcion_limpieza}
+limpiar_distritos <- function(x) {
+  x1 <- str_remove(x, "^[0-9]+\\.\\s+")
+  x2 <- stri_trans_general(x1, "Latin-ASCII")
+  x3 <- str_to_upper(x2)
+  x4 <- str_replace(x3, "POBLES", "POBLATS")
+  x_final <- str_trim(x4)
+  return(x_final)
+}
+```
+
+## 1.3 Carga de datos de servicios y población
+
+```{r carga_servicios_poblacion, message=FALSE, warning=FALSE}
+servicios_raw <- read_csv2("C:/Users/vilil/OneDrive/Escritorio/UPV/2º Grado Ciencia de Datos/PROYECTO 2/dataset_global_servicios.csv")
+poblacion_raw <- read_xlsx("C:/Users/vilil/OneDrive/Escritorio/UPV/2º Grado Ciencia de Datos/PROYECTO 2/DATOS LIMPIOS DEFINITIVOS/Poblacion_por_edad.xlsx", skip = 2)
+view(poblacion_raw)
+```
+
+## 1.4 Carga de datos de renta y salud autopercibida
+
+```{r carga_renta_salud, message=FALSE, warning=FALSE}
+renta_raw <- read_xlsx("C:/Users/vilil/OneDrive/Escritorio/UPV/2º Grado Ciencia de Datos/PROYECTO 2/DATOS LIMPIOS DEFINITIVOS/datos_renta.xlsx", col_names = FALSE)
+colnames(renta_raw) <- c("distrito_id", "renta_unidad_consumo")
+View(renta_raw)
+
+salud_raw <- read_xlsx("C:/Users/vilil/OneDrive/Escritorio/UPV/2º Grado Ciencia de Datos/PROYECTO 2/DATOS LIMPIOS DEFINITIVOS/SM1_Salud autopercibida.xlsx")
+```
+
+---
+
+# 2. Transformación e integración de datos
+
+## 2.1 Procesamiento del dataset de población
+
+Se filtran únicamente las filas correspondientes a distritos reales, se agrupan los tramos de edad en tres categorías (Jóvenes, Adultos y Ancianos), se calculan sus proporciones sobre el total y se estima la edad media ponderada de cada distrito.
+
+```{r procesamiento_poblacion}
+poblacion_filt <- poblacion_raw[str_detect(poblacion_raw[[1]], "^\\s*[0-9]+"), ]
+
+poblacion_filt$distrito <- limpiar_distritos(poblacion_filt[[1]])
+
+poblacion_filt$Jovenes  <- rowSums(poblacion_filt[, c("0 - 4", "5 - 9", "10 - 14", "15 - 19", "20 - 24")])
+poblacion_filt$Adultos  <- rowSums(poblacion_filt[, c("25 - 29", "30 -34", "35 - 39", "40 - 44", "45 - 49", "50 - 54", "55 - 59", "60 - 64")])
+poblacion_filt$Ancianos <- rowSums(poblacion_filt[, c("65 - 69", "70 - 74", "75 - 79", "80 - 84", "85 - 89", "≥ 90")])
+
+poblacion_filt$p_jov <- poblacion_filt$Jovenes / poblacion_filt$Total
+poblacion_filt$p_adu <- poblacion_filt$Adultos / poblacion_filt$Total
+poblacion_filt$p_anc <- poblacion_filt$Ancianos / poblacion_filt$Total
+
+puntos_medios <- seq(2.5, 87.5, by = 5)
+suma_edades <- rowSums(poblacion_filt[, 3:20] * puntos_medios) + (poblacion_filt$`≥ 90` * 95)
+poblacion_filt$edad_media <- suma_edades / poblacion_filt$Total
+View(poblacion_filt)
+
+poblacion_clean <- poblacion_filt[, c("distrito", "Total", "edad_media", "p_jov", "p_adu", "p_anc")]
+View(poblacion_clean)
+```
+
+## 2.2 Conteo de servicios y definición de la matriz de pesos
+
+Cada tipo de servicio recibe tres pesos diferenciados según el grupo de edad al que resulta más relevante. Los pesos reflejan la mayor o menor importancia de cada servicio en función del perfil demográfico del distrito.
+
+```{r matriz_pesos}
+servicios_raw$distrito <- limpiar_distritos(servicios_raw$distrito_asignado)
+conteo_servicios <- count(servicios_raw, distrito, tipo_servicio)
+
+pesos_servicios <- tribble(
+  ~tipo_servicio,        ~w_jov, ~w_adu, ~w_anc,
+  "Colegio",             1.0,    0.5,    0.1, "Universidad",         1.0,    0.5,    0.1,
+  "Farmacia",            0.2,    0.8,    1.0, "Hospital",            0.5,    0.8,    1.0,
+  "Banco",               0.1,    1.0,    0.8, "Supermercado",        0.5,    1.0,    1.0,
+  "Polideportivo",       1.0,    0.8,    0.5, "Biblioteca",          1.0,    0.5,    0.2,
+  "Parques Bomberos",    0.1,    0.1,    0.1, "Peluqueria",          0.5,    0.5,    0.5,
+  "Restaurante",         0.5,    0.8,    0.6, "Centro Comercial",    1.0,    0.8,    0.5,
+  "Comisaria",           0.5,    0.5,    0.5, "Monumento Turistico", 0.5,    0.5,    0.5,
+  "Parking",             0.2,    1.0,    0.5
+)
+
+View(pesos_servicios)
+```
+
+## 2.3 Cálculo del índice de accesibilidad por distrito
+
+Se cruzan los datos de servicios con los perfiles demográficos y se calcula la puntuación ponderada. El índice final normaliza la puntuación por cada 1.000 habitantes para permitir la comparación entre distritos de diferente tamaño.
+
+```{r calculo_indice}
+df_unido <- inner_join(conteo_servicios, poblacion_clean, by = "distrito")
+df_completo <- left_join(df_unido, pesos_servicios, by = "tipo_servicio")
+View(df_completo)
+
+df_completo$puntuacion <- df_completo$n * (df_completo$p_jov * df_completo$w_jov + 
+                                           df_completo$p_adu * df_completo$w_adu + 
+                                           df_completo$p_anc * df_completo$w_anc)
+
+analisis_final <- aggregate(cbind(n, puntuacion) ~ distrito + edad_media + Total, 
+                            data = df_completo, FUN = sum)
+View(analisis_final)
+
+colnames(analisis_final)[4:5] <- c("total_servicios", "Puntuacion")
+
+analisis_final$indice_final <- (analisis_final$Puntuacion / analisis_final$Total) * 1000
+
+analisis_final <- analisis_final[order(-analisis_final$indice_final), ]
+View(analisis_final)
+```
+
+## 2.4 Integración con datos de renta y salud autopercibida
+
+> **Nota:** El indicador de salud autopercibida recoge el porcentaje de personas que declaran tener una salud *"Regular"*, *"Mala"* o *"Muy Mala"*. Por tanto, **a menor valor, más saludable es el distrito**.
+
+```{r integracion_renta}
+renta_raw$num_distrito <- as.numeric(str_extract(renta_raw$distrito_id, "[0-9]{2}$"))
+renta_clean <- renta_raw[!is.na(renta_raw$num_distrito), ]
+View(renta_clean)
+
+nombres_vlc <- data.frame(
+  num_distrito = 1:19,
+  distrito = c("CIUTAT VELLA", "L'EIXAMPLE", "EXTRAMURS", "CAMPANAR", "LA SAIDIA", 
+               "EL PLA DEL REAL", "L'OLIVERETA", "PATRAIX", "JESUS", "QUATRE CARRERES", 
+               "POBLATS MARITIMS", "CAMINS AL GRAU", "ALGIROS", "BENIMACLET", "RASCANYA", 
+               "BENICALAP", "POBLATS DEL NORD", "POBLATS DE L'OEST", "POBLATS DEL SUD")
+)
+
+renta_con_nombre <- merge(renta_clean, nombres_vlc, by = "num_distrito")
+View(renta_con_nombre)
+```
+
+```{r integracion_salud}
+colnames(salud_raw) <- c("Indicador", "Territorio", "Anio", "Sexo", "Grupo_edad", "Nivel_estudios", "Salud_valor")
+View(salud_raw)
+
+salud_filt <- salud_raw[salud_raw$Sexo == "Total" & 
+                        salud_raw$Grupo_edad == "Total" & 
+                        salud_raw$Nivel_estudios == "Total", ]
+View(salud_filt)
+
+salud_filt$distrito <- str_remove(salud_filt$Territorio, "Distrito ")
+salud_filt$distrito <- stri_trans_general(salud_filt$distrito, "Latin-ASCII")
+salud_filt$distrito <- str_to_upper(salud_filt$distrito)
+salud_filt$distrito <- str_replace(salud_filt$distrito, "POBLES", "POBLATS")
+salud_filt$distrito <- str_trim(salud_filt$distrito)
+
+salud_clean <- salud_filt[, c("distrito", "Salud_valor")]
+View(salud_clean)
+```
+
+```{r join_final}
+df_intermedio <- merge(analisis_final, renta_con_nombre[, c("distrito", "renta_unidad_consumo")], by = "distrito")
+
+analisis_objetivo1 <- merge(df_intermedio, salud_clean, by = "distrito")
+
+cor_renta <- cor(analisis_objetivo1$indice_final, analisis_objetivo1$renta_unidad_consumo)
+cor_salud <- cor(analisis_objetivo1$indice_final, analisis_objetivo1$Salud_valor)
+
+print(analisis_objetivo1)
+View(analisis_objetivo1)
+message("Correlación Servicios-Renta: ", round(cor_renta, 3))
+message("Correlación Servicios-Salud: ", round(cor_salud, 3))
+```
+
+---
+
+# 3. Visualización y análisis
+
+## 3.1 Ranking de accesibilidad por distrito
+
+El gráfico de barras horizontales ordenadas es **idóneo** para comunicar el ranking del índice: permite comparar todos los distritos de un vistazo y la escala de color refuerza el gradiente de accesibilidad. Responde directamente a la conclusión 4.1.
+
+```{r grafico_ranking}
+analisis_objetivo1$distrito <- factor(analisis_objetivo1$distrito, 
+                                      levels = analisis_objetivo1$distrito[order(analisis_objetivo1$indice_final)])
+
+ggplot(analisis_objetivo1, aes(x = distrito, y = indice_final, fill = indice_final)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_gradient2(low = "", mid = "red", high = "green",
+                       midpoint = median(analisis_objetivo1$indice_final)) +
+  labs(title = "Ranking de Accesibilidad: Modelo 15 Minutos en Valencia",
+       subtitle = "Puntuación ponderada por edad y normalizada por cada 1.000 habitantes",
+       x = "Distrito", y = "Score de Servicios",
+       fill = "Nivel de Acceso") +
+  theme_minimal()
+```
+
+## 3.2 Relación entre renta y acceso a servicios
+
+El scatter con línea de regresión es **adecuado** para mostrar la correlación positiva (r = 0.704) de la conclusión 4.2. El tamaño de los puntos aporta el contexto poblacional y los labels permiten identificar cada distrito.
+
+```{r grafico_renta_indice}
+ggplot(analisis_objetivo1, aes(x = renta_unidad_consumo, y = indice_final)) +
+  geom_point(aes(size = Total), color = "steelblue", alpha = 0.7) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  geom_text(aes(label = distrito), vjust = -1, size = 3, check_overlap = TRUE) +
+  labs(title = "Relación entre Renta y Acceso a Servicios",
+       subtitle = "La brecha económica del modelo de 15 minutos",
+       x = "Renta media por unidad de consumo (€)",
+       y = "Score de Servicios (por 1000 hab.)",
+       size = "Población Total") +
+  theme_light()
+```
+
+---
+
+## 3.3 Impacto de los servicios en la salud autopercibida
+
+Este scatter es **idóneo** para demostrar la correlación negativa (r = −0.665) de la conclusión 4.3: a mayor acceso a servicios, menor porcentaje de población con salud autopercibida negativa.
+
+```{r grafico_indice_salud}
+ggplot(analisis_objetivo1, aes(x = indice_final, y = Salud_valor)) +
+  geom_point(aes(size = Total), color = "#e67e22", alpha = 0.7) +
+  geom_smooth(method = "lm", color = "#d35400", fill = "#f39c12") +
+  geom_text(aes(label = distrito), vjust = -1.2, size = 3, check_overlap = TRUE) +
+  labs(title = "Impacto de los Servicios en la Salud Autopercibida",
+       subtitle = "Relación entre el Score de 15 min y el % de salud 'No Buena'",
+       x = "Score de Servicios (Ponderado por edad)",
+       y = "% Población con salud Regular/Mala",
+       size = "Población") +
+  theme_minimal()
+```
+
+---
+
+## 3.4 Análisis multivariable: Salud, Renta y Servicios
+
+Este bubble chart es **útil** para mostrar las tres variables simultáneamente y apoya la paradoja de Poblats del Nord (conclusión 4.4). Se complementa con la matriz de correlaciones del apartado siguiente, que sintetiza los valores numéricos de forma más clara.
+```{r}
+
+ggplot(analisis_objetivo1, aes(x = renta_unidad_consumo, y = Salud_valor)) +
+  geom_point(aes(color = indice_final), size = 5, alpha = 0.85) +
+  scale_color_gradient(low = "#E63946", high = "green",
+                       name = "Score 15 min") +
+  scale_y_reverse() +
+  geom_text_repel(aes(label = distrito), size = 3, 
+                  max.overlaps = 20, segment.color = "black") +
+  labs(title = "Relación entre Renta, Salud y Accesibilidad a Servicios",
+       subtitle = "Cada punto representa un distrito; eje Y invertido (arriba = mejor salud)",
+       x = "Renta por Unidad de Consumo (€)",
+       y = "% Población con Salud Autopercibida 'No Buena'") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+### Gráfico adicional 3.1b — Composición del score por tipo de servicio
+
+El ranking anterior muestra *cuánto* puntúa cada distrito, pero no *por qué*. Este gráfico de barras apiladas desglosa la contribución proporcional de cada tipo de servicio. Si los pesos son adecuados, los distritos con población más envejecida deberían mostrar mayor proporción de Farmacias u Hospitales, mientras que los distritos jóvenes deberían mostrar más Colegios o Polideportivos. Esto **hace visible y valida** el sistema de ponderación descrito en la conclusión 4.1.
+
+```{r}
+df_composicion_norm <- df_completo %>%
+  mutate(grupo_servicio = case_when(
+    tipo_servicio %in% c("Hospital", "Farmacia") ~ "Salud",
+    tipo_servicio %in% c("Colegio", "Biblioteca", "Universidad") ~ "Educación",
+    tipo_servicio %in% c("Polideportivo", "Monumento Turistico", 
+                         "Restaurante") ~ "Ocio y Cultura",
+    tipo_servicio %in% c("Comisaria", "Parques Bomberos") ~ "Seguridad",
+    tipo_servicio %in% c("Banco", "Centro Comercial", "Supermercado", 
+                         "Peluqueria", "Parking") ~ "Servicios cotidianos",
+    TRUE ~ "Otros"
+  )) %>%
+  group_by(distrito, grupo_servicio) %>%
+  summarise(punt_grupo = sum(puntuacion),
+            poblacion = first(Total),  # ajusta el nombre si tu columna se llama distinto
+            .groups = "drop") %>%
+  mutate(punt_normalizada = (punt_grupo / poblacion) * 1000)
+
+df_composicion_norm$distrito <- factor(df_composicion_norm$distrito,
+  levels = levels(analisis_objetivo1$distrito))
+
+colores_grupos <- c(
+  "Salud" = "#E63946",
+  "Educación" = "#457B9D",
+  "Ocio y Cultura" = "#F4A261",
+  "Seguridad" = "#2A9D8F",
+  "Servicios cotidianos" = "#9D4EDD"
+)
+
+ggplot(df_composicion_norm, aes(x = distrito, y = punt_normalizada, fill = grupo_servicio)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_manual(values = colores_grupos) +
+  labs(title = "Composición del Score por Grupo de Servicio (normalizada)",
+       subtitle = "Puntuación de cada grupo por cada 1.000 habitantes",
+       x = "Distrito", y = "Score por cada 1.000 habitantes",
+       fill = "Grupo de servicio") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 9),
+        plot.title = element_text(face = "bold"))
+```
+
+---
+
+# 4. Conclusiones
+
+#### 4.1. Validación del Sistema de Ponderación
+
+El modelo de puntuación desarrollado ha permitido transformar un simple inventario de servicios en un **Índice de Accesibilidad Efectiva**. Al ponderar cada servicio según el perfil de edad del distrito (Jóvenes, Adultos y Ancianos), el análisis revela que la utilidad de la infraestructura urbana no es homogénea. Distritos como **Ciutat Vella (11.52)** y **L'Eixample (6.82)** presentan los mayores índices de adecuación, indicando que su oferta de servicios está altamente alineada con las necesidades de sus residentes.
+
+#### 4.2. La Brecha Socioeconómica en el Modelo de 15 Minutos
+
+Uno de los hallazgos más significativos es la **correlación positiva fuerte (r = 0.704)** entre el score de servicios y la renta media por unidad de consumo.
+
+-   Los datos evidencian que el modelo de "Ciudad de los 15 minutos" en Valencia presenta un sesgo económico: los distritos con mayores recursos financieros disfrutan de una densidad de servicios significativamente superior.
+
+-   En contraste, distritos con rentas menores y altas densidades poblacionales, como **Patraix (0.63)** o **Rascanya (0.78)**, se sitúan en la cola del ranking, actuando como "desiertos de servicios" en comparación con el centro histórico.
+
+#### 4.3. Impacto en la Salud Autopercibida
+
+El análisis de salud arroja una **correlación negativa moderada-alta (r = -0.665)** entre la puntuación del modelo y el porcentaje de población que manifiesta una salud "No Buena".
+
+-   Este resultado estadístico es crucial para el proyecto, ya que sugiere que la falta de servicios básicos en el entorno cercano no es solo una cuestión de comodidad urbanística, sino un **determinante social de la salud**.
+
+-   A medida que aumenta la accesibilidad ponderada (Score 15 min), disminuye la percepción negativa de la salud, validando la hipótesis de que los entornos urbanos compactos y bien dotados promueven un mayor bienestar percibido.
+
+#### 4.4. Diagnóstico Territorial y Grupos de Vulnerabilidad
+
+Se ha identificado una paradoja en distritos periféricos como **Poblats del Nord**. A pesar de poseer una renta media-alta, presentan los peores índices de salud autopercibida ($27.6\%$), lo cual se vincula directamente con su baja dotación de servicios ($1.12$). Esto demuestra que, si bien la renta es un factor influyente, la **proximidad física a los servicios** es un componente independiente y vital para la calidad de vida.
+
+#### 4.5. Síntesis Final del Objetivo 1
+
+En conclusión, los resultados confirman que la falta de servicios en Valencia está estrechamente ligada tanto a factores económicos (renta) como a indicadores de bienestar social (salud). Se ha cumplido el objetivo de identificar las zonas de mayor prioridad para la intervención urbanística, siendo **Patraix, Rascanya y Jesús** los distritos que requieren una mayor inversión en servicios para reducir la brecha de desigualdad detectada y mejorar los indicadores de salud pública en la ciudad.
