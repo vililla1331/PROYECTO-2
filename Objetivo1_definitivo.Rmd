@@ -59,7 +59,7 @@ salud_raw <- read_xlsx("C:/Users/vilil/OneDrive/Escritorio/UPV/2º Grado Ciencia
 Se filtran únicamente las filas correspondientes a distritos reales, se agrupan los tramos de edad en tres categorías (Jóvenes, Adultos y Ancianos), se calculan sus proporciones sobre el total y se estima la edad media ponderada de cada distrito.
 
 ```{r procesamiento_poblacion}
-poblacion_filt <- poblacion_raw[str_detect(poblacion_raw[[1]], "^\\s*[0-9]+"), ]
+poblacion_filt <- poblacion_raw %>% filter(str_detect(...1, "^[0-9]"))
 
 poblacion_filt$distrito <- limpiar_distritos(poblacion_filt[[1]])
 
@@ -197,7 +197,7 @@ analisis_objetivo1$distrito <- factor(analisis_objetivo1$distrito,
 ggplot(analisis_objetivo1, aes(x = distrito, y = indice_final, fill = indice_final)) +
   geom_bar(stat = "identity") +
   coord_flip() +
-  scale_fill_gradient2(low = "", mid = "red", high = "green",
+  scale_fill_gradient2(low = "blue", mid = "red", high = "green",
                        midpoint = median(analisis_objetivo1$indice_final)) +
   labs(title = "Ranking de Accesibilidad: Modelo 15 Minutos en Valencia",
        subtitle = "Puntuación ponderada por edad y normalizada por cada 1.000 habitantes",
