@@ -1,0 +1,2629 @@
+---
+title: "PROYECTO II: VALENCIA - CIUDAD 15 MINUTOS"
+output:
+  pdf_document: default
+  word_document: default
+  html_document:
+    code_folding: hide
+date: "2026-02-25"
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**AUTORES:**
+Xavier Bellver Fernández,
+Daniel Vila Vega,
+David Cámara Gil
+
+Cargar librerias necesarias:
+
+```{r, message=FALSE}
+library(sf)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(janitor)
+library(leaflet)
+library(shiny)
+library(ggplot2)
+library(tibble)
+library(tidyverse)
+library(readxl)
+library(stringi)
+```
+
+# **1. Transformar archivos .geojson a .csv**
+
+El primer paso va a ser pasar los archivos con formato .GeoJSON a formato .CSV
+
+Al extraer los datos de OpenStreetMap, las geometrías venían mezcladas (puntos y polígonos). Para poder unificarlas y calcular distancias en el análisis espacial posterior, aplicamos una transformación espacial (st_centroid()) para convertir todos los polígonos en puntos centrales, resolviendo así la inconsistencia del dataset original.
+
+Este mismo proceso lo realizaremos con todos las bases de datos que se encuentren en formato .GeoJSON
+
+```{r, warning=FALSE, results='hide'}
+# 1. Leer el archivo
+datos <- st_read("DATOS ORIGINALES/DATOS ORIGINALES/universidades.geojson")  # Cambiamos el nombre del archivo que queramos transformar
+
+# 2. Convertir cualquier edificio (polígono) en un solo punto central
+# Nota: Es normal si te sale un 'Warning' rojo aquí sobre las proyecciones, ignóralo.
+
+datos_reparados <- st_make_valid(datos)
+datos_puntos <- st_centroid(datos_reparados)
+
+# 3. Ahora sí, extraemos las coordenadas (ya que todo son puntos)
+datos_listos <- datos_puntos %>%
+  mutate(
+    longitud = st_coordinates(.)[,1],
+    latitud = st_coordinates(.)[,2]
+  )
+
+# 4. Quitamos la geometría y guardamos el CSV
+datos_tabla <- st_drop_geometry(datos_listos)
+write.csv2(datos_tabla, "DATOS ORIGINALES/DATOS ORIGINALES/universidades.csv", row.names = FALSE)  # Cambiamos al nuevo nombre del archivo transformado
+```
+
+# **2. Eliminación de columnas no deseadas y limpieza de los datasets de OpenStreetMap**
+
+El segundo paso es eliminar las columnas no necesarias para nuestros objetivos.
+
+La mayoría de estas columnas eliminadas eran metadatos de OpenStreetMap, variaciones de idiomas y datos históricos irrelevantes puesto que nuestro proyecto se centra en el presente.
+
+No es posible hacer un código global para limpiar cada uno de los datasets debido a que estos presentan distintas varibles, por tanto es necesario crear un código distinto para limpiar cada uno de ellos.
+
+Durante la fase de preprocesamiento de los datasets extraídos de OpenStreetMap, se detectaron valores ausentes (NAs) en la variable identificativa principal ('name'). Dado que la ausencia de esta variable impide la verificación de la existencia real del servicio público en esa ubicación cartográfica, se procedió a la eliminación completa de dichas observaciones utilizando la función drop_na(). Esta técnica de depuración asegura la inclusión exclusiva de infraestructuras verificables en los modelos de medición de distancias para la Ciudad de los 15 minutos.
+
+### *Limpieza especifica dataset bancos:*
+
+La limpieza de datos original requirió el manejo de un alto volumen de valores faltantes (NAs) derivados del web scraping de OpenStreetMap. Se optó por la imputación de valores lógicos en variables de interés (ej. asignando 'no' a la ausencia de la etiqueta 'atm') y se procedió a la eliminación de las columnas postales (addr.), priorizando las coordenadas exactas para el cálculo de distancias en los modelos espaciales.
+
+Luego dedidimos fusionar las columnas "name" y "brand" en una sola columna llamada "nombre_banco" para evitar los valores faltantes en cualquiera de las dos anteriores.
+
+El análisis exploratorio de la variable 'nombre_banco' reveló la presencia de sesgos temporales o 'datos fantasma' procedentes de OpenStreetMap. Se identificaron múltiples entidades que desaparecieron o fueron absorbidas durante el proceso de reestructuración bancaria española (ej. Bancaja, CAM, CCM, Barclays). Ante la imposibilidad de verificar si el local físico sigue operando bajo la marca absorbente o si fue cerrado (dado el cierre masivo de sucursales en España), se tomó la decisión metodológica de eliminar estos registros. Además, se aplicó una estandarización de variables categóricas (ej. unificando 'La Caixa' bajo 'Caixabank') para asegurar la consistencia en el análisis. Este tratamiento exhaustivo maximiza la pureza de los datos y asegura que el mapa de accesibilidad a 15 minutos refleje la realidad urbana actual.
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_bancos <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/bancos.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+bancos_limpios <- datos_bancos %>%
+  select(
+    id,
+    name,
+    brand,
+    amenity,
+    atm,
+    addr.street,
+    addr.housenumber,
+    addr.postcode,
+    latitud,
+    longitud
+  )
+
+# 2. Tratamiento de NAs
+bancos_procesados <- bancos_limpios %>%
+  mutate(
+    # Reemplazar NAs en cajeros (asumimos que si no pone 'yes', es que 'no' tiene cajero exterior)
+    atm = ifelse(is.na(atm) | atm == "", "no", atm),
+  ) %>%
+
+  # 3. Eliminar las columnas postales por tener exceso de NAs (usaremos lat/lon)
+  select(-addr.street, -addr.housenumber, -addr.postcode)
+
+bancos_actuales <- bancos_procesados %>%
+  # 1. Crear la columna unificada
+  mutate(
+    nombre_banco = ifelse(is.na(brand) | brand == "", name, brand)
+  ) %>%
+
+  # 2. Aplicar todos los filtros de limpieza
+  filter(
+    # --- NUEVO: Eliminar filas donde no hay ni nombre ni marca ---
+    !is.na(nombre_banco),          # Que no sea un valor nulo (NA)
+    nombre_banco != "",            # Que no sea un texto vacío
+
+    # --- Eliminar los "falsos positivos" (aseguradoras) ---
+    !grepl("Seguros", nombre_banco, ignore.case = TRUE),
+    !grepl("Mapfre", nombre_banco, ignore.case = TRUE),
+    !grepl("Mutua", nombre_banco, ignore.case = TRUE),
+    !grepl("Adeslas", nombre_banco, ignore.case = TRUE),
+    !grepl("Asisa", nombre_banco, ignore.case = TRUE)
+  ) %>%
+
+  # 3. Borrar las columnas viejas
+  select(-name, -brand)
+
+bancos_depurados <- bancos_actuales %>%
+  # 2. Eliminar los bancos que ya no existen en España
+  filter(
+    !nombre_banco %in% c(
+      "Bancaja",
+      "CAM",
+      "Caja de Ahorros del Mediterráneo",
+      "CCM",
+      "Caja Castilla La Mancha",
+      "Barclays",
+      "Citybank",
+      "Edifici Banc de València"
+    )
+  ) %>%
+
+  # 3. Unificar marcas que son la misma (para evitar duplicados en tus gráficos)
+  mutate(
+    nombre_banco = case_when(
+      nombre_banco == "La Caixa" ~ "Caixabank",
+      nombre_banco == "Santander" ~ "Banco Santander",
+      TRUE ~ nombre_banco # Si no es ninguna de las anteriores, la deja igual
+    )
+  )
+
+# Ver cuántos bancos "vivos" te han quedado realmente en Valencia
+nrow(bancos_depurados)
+
+# Guardar el archivo definitivo
+write.csv2(bancos_depurados, "DATOS LIMPIOS DEFINITIVOS/bancos_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza especifica dataset bibliotecas:*
+
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_bibliotecas <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/bibliotecas.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+bibliotecas_limpios <- datos_bibliotecas %>%
+  select(
+    id,
+    name,
+    amenity,
+    latitud,
+    longitud
+  )
+
+# 3. Elimina la fila SOLO si el NA está en la columna "name"
+bibliotecas_sin_na <- bibliotecas_limpios %>%
+   drop_na(name)
+
+# 4. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(bibliotecas_sin_na, "DATOS LIMPIOS DEFINITIVOS/bibliotecas_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza especifica dataset centros_comerciales:*
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_centros_comerciales <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/centros_comerciales.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+centros_comerciales_limpios <- datos_centros_comerciales %>%
+  select(
+    id,
+    name,
+    shop,
+    latitud,
+    longitud
+  )
+
+# 3. Elimina la fila SOLO si el NA está en la columna "name"
+centros_comerciales_sin_na <- centros_comerciales_limpios %>%
+   drop_na(name)
+
+# 4. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(centros_comerciales_sin_na, "DATOS LIMPIOS DEFINITIVOS/centros_comerciales_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza especifica dataset comisarias:*
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_comisarias <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/comisarias.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+comisarias_limpios <- datos_comisarias %>%
+  select(
+    id,
+    name,
+    amenity,
+    latitud,
+    longitud
+  )
+
+# 3. Elimina la fila SOLO si el NA está en la columna "name"
+comisarias_sin_na <- comisarias_limpios %>%
+   drop_na(name)
+
+# 4. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(comisarias_sin_na, "DATOS LIMPIOS DEFINITIVOS/comisarias_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza especifica dataset farmacias:*
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_farmacias <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/farmacias.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+farmacias_limpios <- datos_farmacias %>%
+  select(
+    id,
+    name,
+    amenity,
+    latitud,
+    longitud
+  )
+
+# 3. Elimina la fila SOLO si el NA está en la columna "name"
+farmacias_sin_na <- farmacias_limpios %>%
+   drop_na(name)
+
+# 4. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(farmacias_sin_na, "DATOS LIMPIOS DEFINITIVOS/farmacias_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza especifica dataset parques_bomberos:*
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_parques_bomberos <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/parques-bomberos.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+parques_bomberos_limpios <- datos_parques_bomberos %>%
+  select(
+    id,
+    name,
+    amenity,
+    latitud,
+    longitud
+  )
+
+# 3. Elimina la fila SOLO si el NA está en la columna "name"
+parques_bomberos_sin_na <- parques_bomberos_limpios %>%
+   drop_na(name)
+
+# 4. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(parques_bomberos_sin_na, "DATOS LIMPIOS DEFINITIVOS/parques_bomberos_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza especifica dataset peluquerias:*
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_peluquerias <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/peluquerias.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+peluquerias_limpios <- datos_peluquerias %>%
+  select(
+    id,
+    name,
+    shop,
+    latitud,
+    longitud
+  )
+
+# 3. Elimina la fila SOLO si el NA está en la columna "name"
+peluquerias_sin_na <- peluquerias_limpios %>%
+   drop_na(name)
+
+# 4. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(peluquerias_sin_na, "DATOS LIMPIOS DEFINITIVOS/peluquerias_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza especifica dataset polideportivos:*
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_polideportivos <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/polideportivos.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+polideportivos_limpios <- datos_polideportivos %>%
+  select(
+    id,
+    name,
+    leisure,
+    latitud,
+    longitud
+  )
+
+# 3. Elimina la fila SOLO si el NA está en la columna "name"
+polideportivos_sin_na <- polideportivos_limpios %>%
+   drop_na(name)
+
+# 4. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(polideportivos_sin_na, "DATOS LIMPIOS DEFINITIVOS/polideportivos_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza especifica dataset supermercados:*
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_supermercados <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/supermercados.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+supermercados_limpios <- datos_supermercados %>%
+  select(
+    id,
+    name,
+    shop,
+    latitud,
+    longitud
+  )
+
+# 3. Elimina la fila SOLO si el NA está en la columna "name"
+supermercados_sin_na <- supermercados_limpios %>%
+   drop_na(name)
+
+# 4. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(supermercados_sin_na, "DATOS LIMPIOS DEFINITIVOS/supermercados_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza especifica dataset restaurantes:*
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_restaurantes <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/restaurantes.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+restaurantes_limpios <- datos_restaurantes %>%
+  select(
+    id,
+    name,
+    amenity,
+    latitud,
+    longitud
+  )
+
+# 3. Elimina la fila SOLO si el NA está en la columna "name"
+restaurantes_sin_na <- restaurantes_limpios %>%
+   drop_na(name)
+
+# 4. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(restaurantes_sin_na, "DATOS LIMPIOS DEFINITIVOS/restaurantes_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza especifica dataset universidades:*
+
+```{r, results='hide'}
+# 1. Leer el archivo (usando read.csv2 porque el delimitador es ;)
+datos_universidades <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/universidades.csv")
+
+# 2. Seleccionar solo las columnas que nos interesan
+universidades_limpios <- datos_universidades %>%
+  select(
+    id,
+    name,
+    amenity,
+    latitud,
+    longitud
+  )
+
+# 3. Elimina la fila SOLO si el NA está en la columna "name"
+universidades_sin_na <- universidades_limpios %>%
+   drop_na(name)
+
+# 4. Guardar el nuevo archivo limpio para usarlo en tu análisis espacial
+write.csv2(universidades_sin_na, "DATOS LIMPIOS DEFINITIVOS/universidades_limpio.csv", row.names = FALSE)
+```
+
+# **3. Limpieza de los datasets de Open Data Valencia**
+
+Para incorporar los equipamientos educativos al análisis de la Ciudad de los 15 minutos, se recurrió a una fuente oficial secundaria: el portal Open Data del Ayuntamiento de Valencia. El formato de origen presentaba un desafío estructural, ya que las coordenadas cartográficas estaban concatenadas en formato de cadena de texto (string) dentro de una única variable ('Geo Point'). Para posibilitar el cálculo de distancias, fue necesario aplicar técnicas de manejo de texto. Se utilizó la función separate() de *tidyr* para dividir dicha variable utilizando una expresión regular delimitadora (coma y espacio), transformando y formateando los resultados a valores numéricos (latitud y longitud separados). Finalmente, se estandarizó la nomenclatura de las variables (ID, Nombre, Tipo, Latitud y Longitud) para homogeneizarla con la base de datos previa de OpenStreetMap.
+
+### *Limpieza específica dataset centros_educativos*
+
+```{r, results='hide'}
+# 1. Leer el archivo descargado del Open Data Valencia
+# Nota: al leerlo, R cambia el espacio de "Geo Point" por "Geo.Point" por defecto
+datos_colegios <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/centros-educativos-en-valencia.csv")
+
+# 2. Seleccionar, renombrar y limpiar las columnas
+colegios_limpios <- datos_colegios %>%
+  # Primero, seleccionamos y renombramos las columnas al vuelo para que tengan sentido
+  select(
+    id = codcen,           # codcen es el Código de Centro oficial
+    nombre = dlibre,       # dlibre es el nombre completo del colegio
+    tipo = regimen,         # regimen indica si es PÚBLICO, CONCERTADO o PRIVADO
+    Geo_Point = Geo.Point # La columna original de coordenadas
+  ) %>%
+
+  # 3. ¡EL TRUCO! Separar la columna "Geo_Point" en latitud y longitud
+  # Le decimos que separe por la coma y el espacio (", ")
+  separate(
+    col = Geo_Point,
+    into = c("latitud", "longitud"),
+    sep = ", ",
+    remove = TRUE # Removemos la columna original porque ya no nos sirve
+  ) %>%
+
+  # 4. Asegurarnos de que lat y lon son tratadas como números (muy útil para mapas)
+  mutate(
+    latitud = as.numeric(latitud),
+    longitud = as.numeric(longitud)
+  )
+
+# 5. Guardar el nuevo CSV ya estructurado para la Ciudad de los 15 min
+write.csv2(colegios_limpios, "DATOS LIMPIOS DEFINITIVOS/centros_educativos.csv", row.names = FALSE)
+```
+
+### *Limpieza específica del dataset emt*
+
+```{r, results='hide'}
+# 1. Leer el archivo descargado del Open Data Valencia
+# Nota: al leerlo, R cambia el espacio de "Geo Point" por "Geo.Point" por defecto
+datos_emt <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/emt.csv", encoding = "UTF-8")
+
+# Limpiar columnas con accentos, barras, espacios ...
+emt_limpio <- datos_emt %>%
+  clean_names()
+
+# 2. Seleccionar, renombrar y limpiar las columnas
+emt_limpios <- emt_limpio %>%
+  # Primero, seleccionamos y renombramos las columnas al vuelo para que tengan sentido
+  select(
+    id_parada,           # codcen es el Código de Centro oficial
+    nombre_parada = denominacio_denominacion,       # dlibre es el nombre completo del colegio
+    lineas = linies_lineas,         # regimen indica si es PÚBLICO, CONCERTADO o PRIVADO
+    Geo_Point = geo_point_2d # La columna original de coordenadas
+  ) %>%
+
+  # 3. ¡EL TRUCO! Separar la columna "Geo_Point" en latitud y longitud
+  # Le decimos que separe por la coma y el espacio (", ")
+  separate(
+    col = Geo_Point,
+    into = c("latitud", "longitud"),
+    sep = ", ",
+    remove = TRUE # Removemos la columna original porque ya no nos sirve
+  ) %>%
+
+  # 4. Asegurarnos de que lat y lon son tratadas como números (muy útil para mapas)
+  mutate(
+    latitud = as.numeric(latitud),
+    longitud = as.numeric(longitud)
+  )
+
+# 5. Guardar el nuevo CSV ya estructurado para la Ciudad de los 15 min
+write.csv2(emt_limpios, "DATOS LIMPIOS DEFINITIVOS/emt.csv", row.names = FALSE)
+```
+
+### *Limpieza específica del dataset fgv (entradas metro/tranvía)*
+
+```{r, results='hide'}
+# 1. Leer el archivo descargado del Open Data Valencia
+# Nota: al leerlo, R cambia el espacio de "Geo Point" por "Geo.Point" por defecto
+datos_fgv <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/fgv-bocas.csv", encoding = "UTF-8")
+
+# Limpiar columnas con accentos, barras, espacios ...
+fgv_limpio <- datos_fgv %>%
+  clean_names()
+
+# 2. Seleccionar, renombrar y limpiar las columnas
+fgv_limpios <- fgv_limpio %>%
+  # Primero, seleccionamos y renombramos las columnas al vuelo para que tengan sentido
+  select(
+    id_parada = id_boca,           # codcen es el Código de Centro oficial
+    nombre_parada = denominacio_denominacion,       # dlibre es el nombre completo del colegio
+    lineas = linies_lineas,         # regimen indica si es PÚBLICO, CONCERTADO o PRIVADO
+    Geo_Point = geo_point_2d # La columna original de coordenadas
+  ) %>%
+
+  # 3. ¡EL TRUCO! Separar la columna "Geo_Point" en latitud y longitud
+  # Le decimos que separe por la coma y el espacio (", ")
+  separate(
+    col = Geo_Point,
+    into = c("latitud", "longitud"),
+    sep = ", ",
+    remove = TRUE # Removemos la columna original porque ya no nos sirve
+  ) %>%
+
+  # 4. Asegurarnos de que lat y lon son tratadas como números (muy útil para mapas)
+  mutate(
+    latitud = as.numeric(latitud),
+    longitud = as.numeric(longitud)
+  )
+
+# 5. Guardar el nuevo CSV ya estructurado para la Ciudad de los 15 min
+write.csv2(fgv_limpios, "DATOS LIMPIOS DEFINITIVOS/fgv-bocas.csv", row.names = FALSE)
+```
+
+### *Limpieza específica del dataset hospitales/centros de salud*
+
+Durante la fase de comprobación de los datos brutos, se detectó la ausencia de claves primarias (identificadores únicos) en ciertas fuentes oficiales. Para asegurar la trazabilidad de cada observación y permitir futuras operaciones de cruce de tablas y modelos de agrupación (clustering), se generó una variable de identificación (id) mediante indexación secuencial de filas. Esta transformación de formato de datos garantiza la integridad referencial en todo el pipeline analítico del proyecto.
+
+```{r, results='hide'}
+# 1. Leer el archivo descargado del Open Data Valencia
+# Nota: al leerlo, R cambia el espacio de "Geo Point" por "Geo.Point" por defecto
+datos_hospitales <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/hospitales.csv", encoding = "UTF-8")
+
+
+# Limpiar columnas con accentos, barras, espacios ...
+hospitales_limpio <- datos_hospitales %>%
+  clean_names()
+
+# 2. Seleccionar, renombrar y limpiar las columnas
+hospitales_limpios <- hospitales_limpio %>%
+  # Primero, seleccionamos y renombramos las columnas al vuelo para que tengan sentido
+  select(
+    nombre = nombre,       # dlibre es el nombre completo del colegio
+    financiacion = financiaci,         # regimen indica si es PÚBLICO, CONCERTADO o PRIVADO
+    tipo,
+    Geo_Point = geo_point_2d # La columna original de coordenadas
+  ) %>%
+
+  # 3. ¡EL TRUCO! Separar la columna "Geo_Point" en latitud y longitud
+  # Le decimos que separe por la coma y el espacio (", ")
+  separate(
+    col = Geo_Point,
+    into = c("latitud", "longitud"),
+    sep = ", ",
+    remove = TRUE # Removemos la columna original porque ya no nos sirve
+  ) %>%
+
+  # 4. Asegurarnos de que lat y lon son tratadas como números (muy útil para mapas)
+  mutate(
+    latitud = as.numeric(latitud),
+    longitud = as.numeric(longitud)
+  )
+
+# Supongamos que tu dataset sin ID se llama "datos_sin_id"
+datos_con_id <- hospitales_limpios %>%
+
+  # 1. Creamos la nueva columna "id" usando el número de fila actual
+  mutate(id = row_number()) %>%
+  # 2. Movemos la columna "id" para que sea la primera de la izquierda
+  relocate(id)
+
+# 5. Guardar el nuevo CSV ya estructurado para la Ciudad de los 15 min
+write.csv2(datos_con_id, "DATOS LIMPIOS DEFINITIVOS/hospitales.csv", row.names = FALSE)
+```
+
+### *Limpieza específica del dataset monumentos_turísticos*
+
+```{r, results='hide'}
+# 1. Leer el archivo descargado del Open Data Valencia
+# Nota: al leerlo, R cambia el espacio de "Geo Point" por "Geo.Point" por defecto
+datos_monumentos <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/monuments-turistics.csv", encoding = "UTF-8")
+
+# Limpiar columnas con accentos, barras, espacios ...
+monumentos_limpio <- datos_monumentos %>%
+  clean_names()
+
+# 2. Seleccionar, renombrar y limpiar las columnas
+monumentos_limpios <- monumentos_limpio %>%
+  # Primero, seleccionamos y renombramos las columnas al vuelo para que tengan sentido
+  select(
+    id = gid,           # codcen es el Código de Centro oficial
+    nombre = nom_nombre,       # dlibre es el nombre completo del colegio
+    Geo_Point = geo_point_2d # La columna original de coordenadas
+  ) %>%
+
+  # 3. ¡EL TRUCO! Separar la columna "Geo_Point" en latitud y longitud
+  # Le decimos que separe por la coma y el espacio (", ")
+  separate(
+    col = Geo_Point,
+    into = c("latitud", "longitud"),
+    sep = ", ",
+    remove = TRUE # Removemos la columna original porque ya no nos sirve
+  ) %>%
+
+  # 4. Asegurarnos de que lat y lon son tratadas como números (muy útil para mapas)
+  mutate(
+    latitud = as.numeric(latitud),
+    longitud = as.numeric(longitud)
+  )
+
+# 5. Guardar el nuevo CSV ya estructurado para la Ciudad de los 15 min
+write.csv2(monumentos_limpios, "DATOS LIMPIOS DEFINITIVOS/monumentos_turisticos.csv", row.names = FALSE)
+```
+
+### *Limpieza específica del dataset parkings*
+
+```{r, results='hide'}
+# 1. Leer el archivo descargado del Open Data Valencia
+# Nota: al leerlo, R cambia el espacio de "Geo Point" por "Geo.Point" por defecto
+datos_parkings <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/parkings.csv", encoding = "UTF-8")
+
+# Limpiar columnas con accentos, barras, espacios ...
+parkings_limpio <- datos_parkings %>%
+  clean_names()
+
+# 2. Seleccionar, renombrar y limpiar las columnas
+parkings_limpios <- parkings_limpio %>%
+  # Primero, seleccionamos y renombramos las columnas al vuelo para que tengan sentido
+  select(
+    id = id_aparcament_id_aparcamiento,           # codcen es el Código de Centro oficial
+    nombre = nom_nombre,       # dlibre es el nombre completo del colegio
+    plazas = places_totals_plazas_totales,
+    Geo_Point = geo_point_2d # La columna original de coordenadas
+  ) %>%
+
+  # 3. ¡EL TRUCO! Separar la columna "Geo_Point" en latitud y longitud
+  # Le decimos que separe por la coma y el espacio (", ")
+  separate(
+    col = Geo_Point,
+    into = c("latitud", "longitud"),
+    sep = ", ",
+    remove = TRUE # Removemos la columna original porque ya no nos sirve
+  ) %>%
+
+  # 4. Asegurarnos de que lat y lon son tratadas como números (muy útil para mapas)
+  mutate(
+    latitud = as.numeric(latitud),
+    longitud = as.numeric(longitud)
+  )
+
+# 5. Guardar el nuevo CSV ya estructurado para la Ciudad de los 15 min
+write.csv2(parkings_limpios, "DATOS LIMPIOS DEFINITIVOS/parkings_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza específica del dataset valenbisi*
+
+```{r, results='hide'}
+# 1. Leer el archivo descargado del Open Data Valencia
+# Nota: al leerlo, R cambia el espacio de "Geo Point" por "Geo.Point" por defecto
+datos_valenbisi <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/valenbisi.csv", encoding = "UTF-8")
+
+# Limpiar columnas con accentos, barras, espacios ...
+valenbisi_limpio <- datos_valenbisi %>%
+  clean_names()
+
+# 2. Seleccionar, renombrar y limpiar las columnas
+valenbisi_limpios <- valenbisi_limpio %>%
+  # Primero, seleccionamos y renombramos las columnas al vuelo para que tengan sentido
+  select(
+    id = numero,           # codcen es el Código de Centro oficial
+    direccion = direccion,       # dlibre es el nombre completo del colegio
+    plazas = espacios_totales,
+    Geo_Point = geo_point_2d # La columna original de coordenadas
+  ) %>%
+
+  # 3. ¡EL TRUCO! Separar la columna "Geo_Point" en latitud y longitud
+  # Le decimos que separe por la coma y el espacio (", ")
+  separate(
+    col = Geo_Point,
+    into = c("latitud", "longitud"),
+    sep = ", ",
+    remove = TRUE # Removemos la columna original porque ya no nos sirve
+  ) %>%
+
+  # 4. Asegurarnos de que lat y lon son tratadas como números (muy útil para mapas)
+  mutate(
+    latitud = as.numeric(latitud),
+    longitud = as.numeric(longitud)
+  )
+
+# 5. Guardar el nuevo CSV ya estructurado para la Ciudad de los 15 min
+write.csv2(valenbisi_limpios, "DATOS LIMPIOS DEFINITIVOS/valenbisi_limpio.csv", row.names = FALSE)
+```
+
+### *Limpieza específica del dataset distritos*
+
+```{r, results='hide'}
+# 1. Leer el archivo descargado del Open Data Valencia
+# Nota: al leerlo, R cambia el espacio de "Geo Point" por "Geo.Point" por defecto
+datos_distritos <- read.csv2("DATOS ORIGINALES/DATOS ORIGINALES/distritos.csv", encoding = "UTF-8")
+
+# Limpiar columnas con accentos, barras, espacios ...
+distritos_limpio <- datos_distritos %>%
+  clean_names()
+
+# 2. Seleccionar, renombrar y limpiar las columnas
+distritos_limpios <- distritos_limpio %>%
+  # Primero, seleccionamos y renombramos las columnas al vuelo para que tengan sentido
+  select(
+    id_distrito = codigo_distrito,           # codcen es el Código de Centro oficial
+    nombre,       # dlibre es el nombre completo del colegio
+    Geo_Point = geo_point_2d # La columna original de coordenadas
+  ) %>%
+
+  # 3. ¡EL TRUCO! Separar la columna "Geo_Point" en latitud y longitud
+  # Le decimos que separe por la coma y el espacio (", ")
+  separate(
+    col = Geo_Point,
+    into = c("latitud", "longitud"),
+    sep = ", ",
+    remove = TRUE # Removemos la columna original porque ya no nos sirve
+  ) %>%
+
+  # 4. Asegurarnos de que lat y lon son tratadas como números (muy útil para mapas)
+  mutate(
+    latitud = as.numeric(latitud),
+    longitud = as.numeric(longitud)
+  )
+
+distritos_unicos <- distritos_limpios %>%
+  # distinct() busca los valores únicos en 'nombre'
+  # .keep_all = TRUE es fundamental para que no borre las columnas de latitud y longitud
+  distinct(nombre, .keep_all = TRUE)
+
+# 5. Guardar el nuevo CSV ya estructurado para la Ciudad de los 15 min
+write.csv2(distritos_unicos, "DATOS LIMPIOS DEFINITIVOS/distritos_limpio.csv", row.names = FALSE)
+```
+
+
+# **3. Fusionar todo en un solo dataset**
+
+### *Unión de los servicios en un dataset*
+
+Una vez ya tenemos todos los datasets completamente limpios, ahora es el momento de juntar todos en un dataset global donde estarán todos los servicios juntos.
+
+```{r}
+# Datasets limpios finales:
+bancos <- read.csv2("DATOS LIMPIOS DEFINITIVOS/bancos_limpio.csv", encoding = "UTF-8")
+bibliotecas <- read.csv2("DATOS LIMPIOS DEFINITIVOS/bibliotecas_limpio.csv", encoding = "UTF-8")
+colegios <- read.csv2("DATOS LIMPIOS DEFINITIVOS/centros_educativos.csv", encoding = "UTF-8")
+farmacias <- read.csv2("DATOS LIMPIOS DEFINITIVOS/farmacias_limpio.csv", encoding = "UTF-8")
+centros_comerciales <- read.csv2("DATOS LIMPIOS DEFINITIVOS/centros_comerciales_limpio.csv", encoding = "UTF-8")
+comisarias <- read.csv2("DATOS LIMPIOS DEFINITIVOS/comisarias_limpio.csv", encoding = "UTF-8")
+hospitales <- read.csv2("DATOS LIMPIOS DEFINITIVOS/hospitales.csv", encoding = "UTF-8")
+monumentos_turisticos <- read.csv2("DATOS LIMPIOS DEFINITIVOS/monumentos_turisticos.csv", encoding = "UTF-8")
+parkings <- read.csv2("DATOS LIMPIOS DEFINITIVOS/parkings_limpio.csv", encoding = "UTF-8")
+parques_bomberos <- read.csv2("DATOS LIMPIOS DEFINITIVOS/parques_bomberos_limpio.csv", encoding = "UTF-8")
+peluquerias <- read.csv2("DATOS LIMPIOS DEFINITIVOS/peluquerias_limpio.csv", encoding = "UTF-8")
+polideportivos <- read.csv2("DATOS LIMPIOS DEFINITIVOS/polideportivos_limpio.csv", encoding = "UTF-8")
+restaurantes <- read.csv2("DATOS LIMPIOS DEFINITIVOS/restaurantes_limpio.csv", encoding = "UTF-8")
+supermercados <- read.csv2("DATOS LIMPIOS DEFINITIVOS/supermercados_limpio.csv", encoding = "UTF-8")
+universidades <- read.csv2("DATOS LIMPIOS DEFINITIVOS/universidades_limpio.csv", encoding = "UTF-8")
+
+# 1. Estandarizar Bancos
+bancos_std <- bancos %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = nombre_banco,
+    tipo_servicio = "Banco"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 2. Estandarizar Bibliotecas
+bibliotecas_std <- bibliotecas %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = name,
+    tipo_servicio = "Biblioteca"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 3. Estandarizar Colegios
+colegios_std <- colegios %>%
+  mutate(
+    identificador = as.character(id), # Convertimos el número a texto para que no dé error
+    nombre_servicio = nombre,
+    tipo_servicio = "Colegio"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 4. Estandarizar Farmacias
+farmacias_std <- farmacias %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = name,
+    tipo_servicio = "Farmacia"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 5. Estandarizar Centros Comerciales
+centros_comerciales_std <- centros_comerciales %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = name,
+    tipo_servicio = "Centro Comercial"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 6. Estandarizar Comisarias
+comisarias_std <- comisarias %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = name,
+    tipo_servicio = "Comisaria"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 7. Estandarizar Hospitales
+hospitales_std <- hospitales %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = nombre,
+    tipo_servicio = "Hospital"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 8. Estandarizar Monumentos Turísticos
+monumentos_turisticos_std <- monumentos_turisticos %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = nombre,
+    tipo_servicio = "Monumento Turistico"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 9. Estandarizar Parkings
+parkings_std <- parkings %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = nombre,
+    tipo_servicio = "Parking"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 10. Estandarizar Parques de Bomberos
+parques_bomberos_std <- parques_bomberos %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = name,
+    tipo_servicio = "Parques Bomberos"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 11. Estandarizar Peluquerias
+peluquerias_std <- peluquerias %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = name,
+    tipo_servicio = "Peluqueria"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 12. Estandarizar Polideportivos
+polideportivos_std <- polideportivos %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = name,
+    tipo_servicio = "Polideportivo"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 13. Estandarizar Restaurantes
+restaurantes_std <- restaurantes %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = name,
+    tipo_servicio = "Restaurante"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 14. Estandarizar Supermercados
+supermercados_std <- supermercados %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = name,
+    tipo_servicio = "Supermercado"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 15. Estandarizar Universidades
+universidades_std <- universidades %>%
+  mutate(
+    identificador = as.character(id),
+    nombre_servicio = name,
+    tipo_servicio = "Universidad"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# UNIR TODO EN UN SOLO DATASET (La fusión final)
+servicios_valencia <- bind_rows(bancos_std, bibliotecas_std, colegios_std, farmacias_std, centros_comerciales_std, comisarias_std, hospitales_std, monumentos_turisticos_std, parkings_std, parques_bomberos_std, peluquerias_std, polideportivos_std, restaurantes_std, supermercados_std, universidades_std)
+
+# Comprobar el resultado general y ver cuántos servicios de cada tipo tenemos
+cat("Total de servicios en Valencia:", nrow(servicios_valencia), "\n")
+table(servicios_valencia$tipo_servicio)
+
+servicios_valencia_ids <- servicios_valencia %>%
+  
+  # 1. Agrupamos por tipo de servicio para que la cuenta se reinicie en cada uno
+  group_by(tipo_servicio) %>%
+  
+  # 2. Creamos el nuevo identificador
+  mutate(
+    # substr(..., 1, 2) extrae las dos primeras letras
+    # toupper() las convierte a mayúsculas para que quede como un código real
+    # row_number() nos da el orden (1, 2, 3...)
+    # paste0() junta los pedazos sin espacios. Ej: "BA" + "1" = "BA1"
+    identificador = paste0(toupper(substr(tipo_servicio, 1, 2)), row_number())
+  ) %>%
+  
+  # 3. IMPORTANTE: Desagrupamos al terminar para que no afecte a futuros cálculos
+  ungroup()
+
+# Comprobamos cómo ha quedado la magia:
+head(servicios_valencia_ids)
+
+# 1. Convertir los SERVICIOS a formato espacial (Puntos en un mapa)
+# Le decimos a R qué columnas son las coordenadas y qué sistema usar (CRS 4326 es el estándar GPS)
+servicios_sf <- st_as_sf(servicios_valencia_ids, 
+                         coords = c("longitud", "latitud"), 
+                         crs = 4326, 
+                         remove = FALSE) # remove=FALSE mantiene las columnas originales por si acaso
+
+# 2. Convertir los DISTRITOS a formato espacial
+distritos_sf <- st_as_sf(distritos_unicos, 
+                         coords = c("longitud", "latitud"), 
+                         crs = 4326)
+
+# 3. EL CRUCE ESPACIAL (Spatial Join)
+# st_nearest_feature busca el punto (distrito) más cercano a cada servicio
+servicios_con_distrito_sf <- st_join(servicios_sf, distritos_sf, join = st_nearest_feature)
+
+# 4. Volver a convertir a formato tabla normal (DataFrame) para guardarlo
+dataset_global_final <- servicios_con_distrito_sf %>%
+  st_drop_geometry() %>% # Quitamos la "magia" espacial para que sea un CSV normal
+  rename(distrito_asignado = nombre) %>% # Renombramos la columna para que quede claro
+  select(identificador, nombre_servicio, tipo_servicio, distrito_asignado, latitud, longitud) # Ordenamos
+
+# Comprobamos cómo ha quedado (Deberías ver una nueva columna con el distrito)
+head(dataset_global_final)
+
+# Guardar el "Super Dataset" maestro
+write.csv2(dataset_global_final, "dataset_global_servicios.csv", row.names = FALSE)
+```
+
+### *Unión del transporte en un dataset*
+
+```{r}
+# Datasets limpios finales:
+emt <- read.csv2("DATOS LIMPIOS DEFINITIVOS/emt.csv", encoding = "UTF-8")
+entradas_metro <- read.csv2("DATOS LIMPIOS DEFINITIVOS/fgv-bocas.csv", encoding = "UTF-8")
+valenbisi <- read.csv2("DATOS LIMPIOS DEFINITIVOS/valenbisi_limpio.csv", encoding = "UTF-8")
+
+# 1. Estandarizar EMT
+emt_std <- emt %>%
+  mutate(
+    identificador = as.character(id_parada),
+    nombre_servicio = nombre_parada,
+    tipo_servicio = "Parada EMT"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 2. Estandarizar Entradas_MetroValencia
+entradas_metro_std <- entradas_metro %>%
+  mutate(
+    identificador = as.character(id_parada),
+    nombre_servicio = nombre_parada,
+    tipo_servicio = "Entradas MetroValencia"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# 3. Estandarizar Valenbisi
+valenbisi_std <- valenbisi %>%
+  mutate(
+    identificador = as.character(id), # Convertimos el número a texto para que no dé error
+    nombre_servicio = direccion,
+    tipo_servicio = "Valenbisi"
+  ) %>%
+  select(identificador, nombre_servicio, tipo_servicio, latitud, longitud)
+
+# UNIR TODO EN UN SOLO DATASET (La fusión final)
+servicios_valencia <- bind_rows(emt_std, entradas_metro_std, valenbisi_std)
+
+# Comprobar el resultado general y ver cuántos servicios de cada tipo tenemos
+cat("Total de servicios en Valencia:", nrow(servicios_valencia), "\n")
+table(servicios_valencia$tipo_servicio)
+
+
+servicios_valencia_ids <- servicios_valencia %>%
+  
+  # 1. Agrupamos por tipo de servicio para que la cuenta se reinicie en cada uno
+  group_by(tipo_servicio) %>%
+  
+  # 2. Creamos el nuevo identificador
+  mutate(
+    # substr(..., 1, 2) extrae las dos primeras letras
+    # toupper() las convierte a mayúsculas para que quede como un código real
+    # row_number() nos da el orden (1, 2, 3...)
+    # paste0() junta los pedazos sin espacios. Ej: "BA" + "1" = "BA1"
+    identificador = paste0(toupper(substr(tipo_servicio, 1, 2)), row_number())
+  ) %>%
+  
+  # 3. IMPORTANTE: Desagrupamos al terminar para que no afecte a futuros cálculos
+  ungroup()
+
+# Comprobamos cómo ha quedado la magia:
+head(servicios_valencia_ids)
+
+
+# 1. Convertir los SERVICIOS a formato espacial (Puntos en un mapa)
+# Le decimos a R qué columnas son las coordenadas y qué sistema usar (CRS 4326 es el estándar GPS)
+servicios_sf <- st_as_sf(servicios_valencia_ids, 
+                         coords = c("longitud", "latitud"), 
+                         crs = 4326, 
+                         remove = FALSE) # remove=FALSE mantiene las columnas originales por si acaso
+
+# 2. Convertir los DISTRITOS a formato espacial
+distritos_sf <- st_as_sf(distritos_unicos, 
+                         coords = c("longitud", "latitud"), 
+                         crs = 4326)
+
+# 3. EL CRUCE ESPACIAL (Spatial Join)
+# st_nearest_feature busca el punto (distrito) más cercano a cada servicio
+servicios_con_distrito_sf <- st_join(servicios_sf, distritos_sf, join = st_nearest_feature)
+
+# 4. Volver a convertir a formato tabla normal (DataFrame) para guardarlo
+dataset_global_final2 <- servicios_con_distrito_sf %>%
+  st_drop_geometry() %>% # Quitamos la "magia" espacial para que sea un CSV normal
+  rename(distrito_asignado = nombre) %>% # Renombramos la columna para que quede claro
+  select(identificador, nombre_servicio, tipo_servicio, distrito_asignado, latitud, longitud) # Ordenamos
+
+# Comprobamos cómo ha quedado (Deberías ver una nueva columna con el distrito)
+head(dataset_global_final2)
+
+# Guardar el "Super Dataset" maestro
+write.csv2(dataset_global_final2, "dataset_global_transporte.csv", row.names = FALSE)
+```
+
+Creamos la **matriz analítica**:
+
+Ahora, para construir la Matriz Analítica final, se procedió a la agregación de las variables espaciales a nivel de distrito. Se utilizó la función pivot_wider de la librería tidyr para pivotar el dataset, transformando la variable categórica 'tipo_servicio' en vectores de conteo absoluto, e imputando ceros estructurales (values_fill = 0) en aquellas zonas carentes de un servicio específico. Finalmente, dado que los algoritmos de reducción de dimensionalidad (PCA) y agrupamiento (K-Means) son sensibles a la magnitud de las variables, se aplicó una transformación de escalado estándar (Z-score) mediante la función scale(). Esto garantiza que variables con alta varianza volumétrica (como las paradas de la EMT) no dominen artificialmente los modelos sobre servicios menos densos (como las bibliotecas)."
+
+```{r}
+# Asumimos que tienes en memoria tu 'dataset_global_final' del paso anterior
+# (Si no, actívalo leyendo el CSV: datos_cruzados <- read.csv2("dataset_15min_CRUZADO.csv"))
+
+# 1. Agrupación y Conteo (Roll-up)
+resumen_distritos <- dataset_global_final %>%
+  
+  # Agrupamos por el nombre del distrito y el tipo de servicio
+  group_by(distrito_asignado, tipo_servicio) %>%
+  
+  # Contamos cuántos servicios hay de cada combinación
+  summarise(total = n(), .groups = "drop") %>%
+  
+  # 2. Pivotar la tabla (Pasar de formato largo a formato ancho)
+  pivot_wider(
+    names_from = tipo_servicio, 
+    values_from = total,
+    values_fill = list(total = 0) # Si un distrito no tiene bibliotecas, pon un 0 (no un NA)
+  ) %>%
+  
+  # Renombrar para que los nombres de las columnas sean limpios en R (sin espacios)
+  rename(
+    total_bancos = Banco,
+    total_bibliotecas = Biblioteca,
+    total_colegios = Colegio,
+    total_farmacias = Farmacia,
+    total_comisarias = Comisaria,
+    total_centrocomercial = `Centro Comercial`,
+    total_hospitales = Hospital,
+    total_parkings = Parking,
+    total_monumentosturisticos = `Monumento Turistico`,
+    total_bomberos = `Parques Bomberos`,
+    total_peluquerias = Peluqueria,
+    total_polideportivos = Polideportivo,
+    total_restaurantes = Restaurante,
+    total_supermercados = Supermercado,
+    total_universidades = Universidad
+  )
+
+# 3. Normalización/Escalado (Z-score) para el PCA y Clustering
+# El algoritmo K-Means y el PCA se vuelven locos si mezclas centenas (EMT) con unidades (Biblios).
+# scale() convierte todo a la misma escala (media 0, desviación estándar 1).
+matriz_analitica <- resumen_distritos %>%
+  mutate(
+    z_bancos = scale(total_bancos)[,1],
+    z_bibliotecas = scale(total_bibliotecas)[,1],
+    z_colegios = scale(total_colegios)[,1],
+    z_farmacias = scale(total_farmacias)[,1],
+    z_comisarias = scale(total_comisarias)[,1],
+    z_centrocomerciales = scale(total_centrocomercial)[,1],
+    z_hospitales = scale(total_hospitales)[,1],
+    z_parkings = scale(total_parkings)[,1],
+    z_monumentosturisticos = scale(total_monumentosturisticos)[,1],
+    z_bomberos = scale(total_bomberos)[,1],
+    z_peluquerias = scale(total_peluquerias)[,1],
+    z_polideportivos = scale(total_polideportivos)[,1],
+    z_restaurantes = scale(total_restaurantes)[,1],
+    z_supermercados = scale(total_supermercados)[,1],
+    z_universidades = scale(total_universidades)[,1],
+  )
+
+# Comprobar el resultado final (¡Deberías ver solo tus 19 distritos!)
+head(matriz_analitica)
+
+# Guardar la joya de la corona
+write.csv2(matriz_analitica,"matriz_analitica_servicios.csv", row.names = FALSE)
+```
+
+
+**OBJETIVO 1**:
+
+# 1. Carga de librerías y datos
+
+## 1.1 Librerías
+
+```{r librerias, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(readxl)
+library(stringi)
+library(ggplot2)
+library(ggrepel)
+```
+
+## 1.2 Función auxiliar de limpieza de nombres de distrito
+
+```{r funcion_limpieza}
+limpiar_distritos <- function(x) {
+  x1 <- str_remove(x, "^[0-9]+\\.\\s+")
+  x2 <- stri_trans_general(x1, "Latin-ASCII")
+  x3 <- str_to_upper(x2)
+  x4 <- str_replace(x3, "POBLES", "POBLATS")
+  x_final <- str_trim(x4)
+  return(x_final)
+}
+```
+
+## 1.3 Carga de datos de servicios y población
+
+```{r carga_servicios_poblacion, message=FALSE, warning=FALSE}
+servicios_raw <- read_csv2("dataset_global_servicios.csv")
+poblacion_raw <- read_xlsx("C:/Users/vilil/OneDrive/Escritorio/UPV/2º Grado Ciencia de Datos/PROYECTO 2/DATOS LIMPIOS DEFINITIVOS/Poblacion_por_edad.xlsx", skip = 2)
+```
+
+## 1.4 Carga de datos de renta y salud autopercibida
+
+```{r carga_renta_salud, message=FALSE, warning=FALSE}
+renta_raw <- read_xlsx("DATOS LIMPIOS DEFINITIVOS/datos_renta.xlsx", col_names = FALSE)
+colnames(renta_raw) <- c("distrito_id", "renta_unidad_consumo")
+
+
+salud_raw <- read_xlsx("DATOS LIMPIOS DEFINITIVOS/SM1_Salud autopercibida.xlsx")
+```
+
+---
+
+# 2. Transformación e integración de datos
+
+## 2.1 Procesamiento del dataset de población
+..
+Se filtran únicamente las filas correspondientes a distritos reales, se agrupan los tramos de edad en tres categorías (Jóvenes, Adultos y Ancianos), se calculan sus proporciones sobre el total y se estima la edad media ponderada de cada distrito.
+
+```{r procesamiento_poblacion}
+poblacion_filt <- poblacion_filt <- poblacion_raw[str_detect(poblacion_raw[[1]], "^\\s*[0-9]+"), ] 
+
+poblacion_filt$distrito <- limpiar_distritos(poblacion_filt[[1]])
+
+poblacion_filt$Jovenes  <- rowSums(poblacion_filt[, c("0 - 4", "5 - 9", "10 - 14", "15 - 19", "20 - 24")])
+poblacion_filt$Adultos  <- rowSums(poblacion_filt[, c("25 - 29", "30 -34", "35 - 39", "40 - 44", "45 - 49", "50 - 54", "55 - 59", "60 - 64")])
+poblacion_filt$Ancianos <- rowSums(poblacion_filt[, c("65 - 69", "70 - 74", "75 - 79", "80 - 84", "85 - 89", "≥ 90")])
+
+poblacion_filt$p_jov <- poblacion_filt$Jovenes / poblacion_filt$Total
+poblacion_filt$p_adu <- poblacion_filt$Adultos / poblacion_filt$Total
+poblacion_filt$p_anc <- poblacion_filt$Ancianos / poblacion_filt$Total
+
+puntos_medios <- seq(2.5, 87.5, by = 5)
+suma_edades <- rowSums(poblacion_filt[, 3:20] * puntos_medios) + (poblacion_filt$`≥ 90` * 95)
+poblacion_filt$edad_media <- suma_edades / poblacion_filt$Total
+View(poblacion_filt)
+
+poblacion_clean <- poblacion_filt[, c("distrito", "Total", "edad_media", "p_jov", "p_adu", "p_anc")]
+
+```
+
+## 2.2 Conteo de servicios y definición de la matriz de pesos
+
+Cada tipo de servicio recibe tres pesos diferenciados según el grupo de edad al que resulta más relevante. Los pesos reflejan la mayor o menor importancia de cada servicio en función del perfil demográfico del distrito.
+
+```{r matriz_pesos}
+servicios_raw$distrito <- limpiar_distritos(servicios_raw$distrito_asignado)
+conteo_servicios <- count(servicios_raw, distrito, tipo_servicio)
+
+pesos_servicios <- tribble(
+  ~tipo_servicio,        ~w_jov, ~w_adu, ~w_anc,
+  "Colegio",             1.0,    0.5,    0.1, "Universidad",         1.0,    0.5,    0.1,
+  "Farmacia",            0.2,    0.8,    1.0, "Hospital",            0.5,    0.8,    1.0,
+  "Banco",               0.1,    1.0,    0.8, "Supermercado",        0.5,    1.0,    1.0,
+  "Polideportivo",       1.0,    0.8,    0.5, "Biblioteca",          1.0,    0.5,    0.2,
+  "Parques Bomberos",    0.1,    0.1,    0.1, "Peluqueria",          0.5,    0.5,    0.5,
+  "Restaurante",         0.5,    0.8,    0.6, "Centro Comercial",    1.0,    0.8,    0.5,
+  "Comisaria",           0.5,    0.5,    0.5, "Monumento Turistico", 0.5,    0.5,    0.5,
+  "Parking",             0.2,    1.0,    0.5
+)
+
+
+```
+
+## 2.3 Cálculo del índice de accesibilidad por distrito
+
+Se cruzan los datos de servicios con los perfiles demográficos y se calcula la puntuación ponderada. El índice final normaliza la puntuación por cada 1.000 habitantes para permitir la comparación entre distritos de diferente tamaño.
+
+```{r calculo_indice}
+df_unido <- inner_join(conteo_servicios, poblacion_clean, by = "distrito")
+df_completo <- left_join(df_unido, pesos_servicios, by = "tipo_servicio")
+View(df_completo)
+
+df_completo$puntuacion <- df_completo$n * (df_completo$p_jov * df_completo$w_jov + 
+                                           df_completo$p_adu * df_completo$w_adu + 
+                                           df_completo$p_anc * df_completo$w_anc)
+
+analisis_final <- aggregate(cbind(n, puntuacion) ~ distrito + edad_media + Total, 
+                            data = df_completo, FUN = sum)
+View(analisis_final)
+
+colnames(analisis_final)[4:5] <- c("total_servicios", "Puntuacion")
+
+analisis_final$indice_final <- (analisis_final$Puntuacion / analisis_final$Total) * 1000
+
+analisis_final <- analisis_final[order(-analisis_final$indice_final), ]
+View(analisis_final)
+```
+
+## 2.4 Integración con datos de renta y salud autopercibida
+
+> **Nota:** El indicador de salud autopercibida recoge el porcentaje de personas que declaran tener una salud *"Regular"*, *"Mala"* o *"Muy Mala"*. Por tanto, **a menor valor, más saludable es el distrito**.
+
+```{r integracion_renta}
+renta_raw$num_distrito <- as.numeric(str_extract(renta_raw$distrito_id, "[0-9]{2}$"))
+renta_clean <- renta_raw[!is.na(renta_raw$num_distrito), ]
+View(renta_clean)
+
+nombres_vlc <- data.frame(
+  num_distrito = 1:19,
+  distrito = c("CIUTAT VELLA", "L'EIXAMPLE", "EXTRAMURS", "CAMPANAR", "LA SAIDIA", 
+               "EL PLA DEL REAL", "L'OLIVERETA", "PATRAIX", "JESUS", "QUATRE CARRERES", 
+               "POBLATS MARITIMS", "CAMINS AL GRAU", "ALGIROS", "BENIMACLET", "RASCANYA", 
+               "BENICALAP", "POBLATS DEL NORD", "POBLATS DE L'OEST", "POBLATS DEL SUD")
+)
+
+renta_con_nombre <- merge(renta_clean, nombres_vlc, by = "num_distrito")
+```
+
+```{r integracion_salud}
+colnames(salud_raw) <- c("Indicador", "Territorio", "Anio", "Sexo", "Grupo_edad", "Nivel_estudios", "Salud_valor")
+View(salud_raw)
+
+salud_filt <- salud_raw[salud_raw$Sexo == "Total" & 
+                        salud_raw$Grupo_edad == "Total" & 
+                        salud_raw$Nivel_estudios == "Total", ]
+View(salud_filt)
+
+salud_filt$distrito <- str_remove(salud_filt$Territorio, "Distrito ")
+salud_filt$distrito <- stri_trans_general(salud_filt$distrito, "Latin-ASCII")
+salud_filt$distrito <- str_to_upper(salud_filt$distrito)
+salud_filt$distrito <- str_replace(salud_filt$distrito, "POBLES", "POBLATS")
+salud_filt$distrito <- str_trim(salud_filt$distrito)
+
+salud_clean <- salud_filt[, c("distrito", "Salud_valor")]
+
+```
+
+```{r join_final}
+df_intermedio <- merge(analisis_final, renta_con_nombre[, c("distrito", "renta_unidad_consumo")], by = "distrito")
+
+analisis_objetivo1 <- merge(df_intermedio, salud_clean, by = "distrito")
+
+cor_renta <- cor(analisis_objetivo1$indice_final, analisis_objetivo1$renta_unidad_consumo)
+cor_salud <- cor(analisis_objetivo1$indice_final, analisis_objetivo1$Salud_valor)
+
+print(analisis_objetivo1)
+View(analisis_objetivo1)
+message("Correlación Servicios-Renta: ", round(cor_renta, 3))
+message("Correlación Servicios-Salud: ", round(cor_salud, 3))
+```
+
+---
+
+# 3. Visualización y análisis
+
+## 3.1 Ranking de accesibilidad por distrito
+
+El gráfico de barras horizontales ordenadas es **idóneo** para comunicar el ranking del índice: permite comparar todos los distritos de un vistazo y la escala de color refuerza el gradiente de accesibilidad. Responde directamente a la conclusión 4.1.
+
+```{r grafico_ranking}
+analisis_objetivo1$distrito <- factor(analisis_objetivo1$distrito, 
+                                      levels = analisis_objetivo1$distrito[order(analisis_objetivo1$indice_final)])
+
+ggplot(analisis_objetivo1, aes(x = distrito, y = indice_final, fill = indice_final)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_gradient2(low = "blue", mid = "red", high = "green",
+                       midpoint = median(analisis_objetivo1$indice_final)) +
+  labs(title = "Ranking de Accesibilidad: Modelo 15 Minutos en Valencia",
+       subtitle = "Puntuación ponderada por edad y normalizada por cada 1.000 habitantes",
+       x = "Distrito", y = "Score de Servicios",
+       fill = "Nivel de Acceso") +
+  theme_minimal()
+```
+
+## 3.2 Relación entre renta y acceso a servicios
+
+El scatter con línea de regresión es **adecuado** para mostrar la correlación positiva (r = 0.704) de la conclusión 4.2. El tamaño de los puntos aporta el contexto poblacional y los labels permiten identificar cada distrito.
+
+```{r grafico_renta_indice}
+ggplot(analisis_objetivo1, aes(x = renta_unidad_consumo, y = indice_final)) +
+  geom_point(aes(size = Total), color = "steelblue", alpha = 0.7) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  geom_text(aes(label = distrito), vjust = -1, size = 3, check_overlap = TRUE) +
+  labs(title = "Relación entre Renta y Acceso a Servicios",
+       subtitle = "La brecha económica del modelo de 15 minutos",
+       x = "Renta media por unidad de consumo (€)",
+       y = "Score de Servicios (por 1000 hab.)",
+       size = "Población Total") +
+  theme_light()
+```
+
+---
+
+## 3.3 Impacto de los servicios en la salud autopercibida
+
+Este scatter es **idóneo** para demostrar la correlación negativa (r = −0.665) de la conclusión 4.3: a mayor acceso a servicios, menor porcentaje de población con salud autopercibida negativa.
+
+```{r grafico_indice_salud}
+ggplot(analisis_objetivo1, aes(x = indice_final, y = Salud_valor)) +
+  geom_point(aes(size = Total), color = "#e67e22", alpha = 0.7) +
+  geom_smooth(method = "lm", color = "#d35400", fill = "#f39c12") +
+  geom_text(aes(label = distrito), vjust = -1.2, size = 3, check_overlap = TRUE) +
+  labs(title = "Impacto de los Servicios en la Salud Autopercibida",
+       subtitle = "Relación entre el Score de 15 min y el % de salud 'No Buena'",
+       x = "Score de Servicios (Ponderado por edad)",
+       y = "% Población con salud Regular/Mala",
+       size = "Población") +
+  theme_minimal()
+```
+
+---
+
+## 3.4 Análisis multivariable: Salud, Renta y Servicios
+
+Este bubble chart es **útil** para mostrar las tres variables simultáneamente y apoya la paradoja de Poblats del Nord (conclusión 4.4). Se complementa con la matriz de correlaciones del apartado siguiente, que sintetiza los valores numéricos de forma más clara.
+```{r}
+
+ggplot(analisis_objetivo1, aes(x = renta_unidad_consumo, y = Salud_valor)) +
+  geom_point(aes(color = indice_final), size = 5, alpha = 0.85) +
+  scale_color_gradient(low = "#E63946", high = "green",
+                       name = "Score 15 min") +
+  scale_y_reverse() +
+  geom_text_repel(aes(label = distrito), size = 3, 
+                  max.overlaps = 20, segment.color = "black") +
+  labs(title = "Relación entre Renta, Salud y Accesibilidad a Servicios",
+       subtitle = "Cada punto representa un distrito; eje Y invertido (arriba = mejor salud)",
+       x = "Renta por Unidad de Consumo (€)",
+       y = "% Población con Salud Autopercibida 'No Buena'") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+### Gráfico adicional 3.1b — Composición del score por tipo de servicio
+
+El ranking anterior muestra *cuánto* puntúa cada distrito, pero no *por qué*. Este gráfico de barras apiladas desglosa la contribución proporcional de cada tipo de servicio. Si los pesos son adecuados, los distritos con población más envejecida deberían mostrar mayor proporción de Farmacias u Hospitales, mientras que los distritos jóvenes deberían mostrar más Colegios o Polideportivos. Esto **hace visible y valida** el sistema de ponderación descrito en la conclusión 4.1.
+
+```{r}
+df_composicion_norm <- df_completo %>%
+  mutate(grupo_servicio = case_when(
+    tipo_servicio %in% c("Hospital", "Farmacia") ~ "Salud",
+    tipo_servicio %in% c("Colegio", "Biblioteca", "Universidad") ~ "Educación",
+    tipo_servicio %in% c("Polideportivo", "Monumento Turistico", 
+                         "Restaurante") ~ "Ocio y Cultura",
+    tipo_servicio %in% c("Comisaria", "Parques Bomberos") ~ "Seguridad",
+    tipo_servicio %in% c("Banco", "Centro Comercial", "Supermercado", 
+                         "Peluqueria", "Parking") ~ "Servicios cotidianos",
+    TRUE ~ "Otros"
+  )) %>%
+  group_by(distrito, grupo_servicio) %>%
+  summarise(punt_grupo = sum(puntuacion),
+            poblacion = first(Total),  # ajusta el nombre si tu columna se llama distinto
+            .groups = "drop") %>%
+  mutate(punt_normalizada = (punt_grupo / poblacion) * 1000)
+
+df_composicion_norm$distrito <- factor(df_composicion_norm$distrito,
+  levels = levels(analisis_objetivo1$distrito))
+
+colores_grupos <- c(
+  "Salud" = "#E63946",
+  "Educación" = "#457B9D",
+  "Ocio y Cultura" = "#F4A261",
+  "Seguridad" = "#2A9D8F",
+  "Servicios cotidianos" = "#9D4EDD"
+)
+
+ggplot(df_composicion_norm, aes(x = distrito, y = punt_normalizada, fill = grupo_servicio)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_manual(values = colores_grupos) +
+  labs(title = "Composición del Score por Grupo de Servicio (normalizada)",
+       subtitle = "Puntuación de cada grupo por cada 1.000 habitantes",
+       x = "Distrito", y = "Score por cada 1.000 habitantes",
+       fill = "Grupo de servicio") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 9),
+        plot.title = element_text(face = "bold"))
+```
+
+---
+
+# 4. Conclusiones
+
+#### 4.1. Validación del Sistema de Ponderación
+
+El modelo de puntuación desarrollado ha permitido transformar un simple inventario de servicios en un **Índice de Accesibilidad Efectiva**. Al ponderar cada servicio según el perfil de edad del distrito (Jóvenes, Adultos y Ancianos), el análisis revela que la utilidad de la infraestructura urbana no es homogénea. Distritos como **Ciutat Vella (11.52)** y **L'Eixample (6.82)** presentan los mayores índices de adecuación, indicando que su oferta de servicios está altamente alineada con las necesidades de sus residentes.
+
+#### 4.2. La Brecha Socioeconómica en el Modelo de 15 Minutos
+
+Uno de los hallazgos más significativos es la **correlación positiva fuerte (r = 0.704)** entre el score de servicios y la renta media por unidad de consumo.
+
+-   Los datos evidencian que el modelo de "Ciudad de los 15 minutos" en Valencia presenta un sesgo económico: los distritos con mayores recursos financieros disfrutan de una densidad de servicios significativamente superior.
+
+-   En contraste, distritos con rentas menores y altas densidades poblacionales, como **Patraix (0.63)** o **Rascanya (0.78)**, se sitúan en la cola del ranking, actuando como "desiertos de servicios" en comparación con el centro histórico.
+
+#### 4.3. Impacto en la Salud Autopercibida
+
+El análisis de salud arroja una **correlación negativa moderada-alta (r = -0.665)** entre la puntuación del modelo y el porcentaje de población que manifiesta una salud "No Buena".
+
+-   Este resultado estadístico es crucial para el proyecto, ya que sugiere que la falta de servicios básicos en el entorno cercano no es solo una cuestión de comodidad urbanística, sino un **determinante social de la salud**.
+
+-   A medida que aumenta la accesibilidad ponderada (Score 15 min), disminuye la percepción negativa de la salud, validando la hipótesis de que los entornos urbanos compactos y bien dotados promueven un mayor bienestar percibido.
+
+#### 4.4. Diagnóstico Territorial y Grupos de Vulnerabilidad
+
+Se ha identificado una paradoja en distritos periféricos como **Poblats del Nord**. A pesar de poseer una renta media-alta, presentan los peores índices de salud autopercibida ($27.6\%$), lo cual se vincula directamente con su baja dotación de servicios ($1.12$). Esto demuestra que, si bien la renta es un factor influyente, la **proximidad física a los servicios** es un componente independiente y vital para la calidad de vida.
+
+#### 4.5. Síntesis Final del Objetivo 1
+
+En conclusión, los resultados confirman que la falta de servicios en Valencia está estrechamente ligada tanto a factores económicos (renta) como a indicadores de bienestar social (salud). Se ha cumplido el objetivo de identificar las zonas de mayor prioridad para la intervención urbanística, siendo **Patraix, Rascanya y Jesús** los distritos que requieren una mayor inversión en servicios para reducir la brecha de desigualdad detectada y mejorar los indicadores de salud pública en la ciudad.
+
+
+
+**OBJETIVO 2:**
+```{r}
+# OBJETIVO 2: ACCESIBILIDAD Y DISTRIBUCIÓN DEL TRANSPORTE PÚBLICO
+#Librerías usadas para este Objetivo2
+library(tidyverse)
+library(readxl)
+library(stringi)
+
+
+# --- 1. CARGA Y AGRUPACIÓN DE DATOS DE TRANSPORTE ---
+transportes <- read_csv2("dataset_global_transporte.csv")
+
+#Se agrupa cada tipo de transporte en cada distrito
+conteo_transportes <- transportes %>%
+  group_by(distrito_asignado, tipo_servicio) %>%
+  summarise(total_paradas = n(), .groups = 'drop')
+
+#A partir de la tabla anterior, se crean las columnas de cada tipo de transporte para cada distrtio para facilitar su interpretación.
+transportes_tipos <- conteo_transportes %>%
+  pivot_wider(names_from = tipo_servicio, values_from = total_paradas, values_fill = list(total_paradas = 0)) %>%
+  # Se acortan los nombres de las columnas
+  rename(
+    EMT = `Parada EMT`,
+    FGV = `Entradas MetroValencia`,
+    Valenbisi = `Valenbisi`
+  ) %>%
+  #Y se calcula el total del numero de paradas de transporte en cada distrtito
+  mutate(Total_Transporte = EMT + FGV + Valenbisi)
+
+```
+
+```{r}
+
+# --- 2. PREPARACIÓN DE DISTRITOS Y CRUCE CON POBLACIÓN ---
+# Usamos la misma función de limpieza del Objetivo 1 para asegurar consistencia
+limpiar_distritos <- function(x) {
+  x1 <- str_remove(x, "^[0-9]+\\.\\s+")
+  x2 <- stri_trans_general(x1, "Latin-ASCII")
+  x3 <- str_to_upper(x2)
+  x4 <- str_replace(x3, "POBLES", "POBLATS")
+  x_final <- str_trim(x4)
+  return(x_final)
+}
+
+transportes_tipos$distrito_limpio <- limpiar_distritos(transportes_tipos$distrito_asignado)
+
+#Cargamos los datos de la polacion y se limpian para tener solo el distrito y su total
+poblacion <- read_xlsx("DATOS LIMPIOS DEFINITIVOS/Poblacion_por_edad.xlsx", skip = 2)
+poblacion_filt <- poblacion[str_detect(poblacion[[1]], "^\\s*[0-9]+"), ]
+poblacion_filt$distrito_limpio <- limpiar_distritos(poblacion_filt[[1]])
+poblacion_limp <- poblacion_filt %>% 
+  select(distrito_limpio, Total) %>%
+  distinct(distrito_limpio, .keep_all = TRUE)
+
+#Se unen los datasets de transporte y de poblacion segun el distrito
+densidad_transportes <- inner_join(transportes_tipos, poblacion_limp, by = "distrito_limpio")
+
+
+```
+
+```{r}
+# --- 3. CREAMOS LAS VARIABLES DERIVADAS--- Para comparar la densidad de servicio sde transporte en cada distrtito segun su poblacion en un indice numerico.
+densidad_transportes <- densidad_transportes %>%
+  mutate(
+    densidad_EMT = (EMT / Total) * 1000,
+    densidad_FGV = (FGV / Total) * 1000,
+    densidad_Valenbisi = (Valenbisi / Total) * 1000,
+    densidad_Global_Transporte = (Total_Transporte / Total) * 1000
+  ) %>%
+  arrange(desc(densidad_Global_Transporte))
+
+View(densidad_transportes)
+
+
+# --- 4. VISUALIZACIÓN DE DATOS ---
+df_grafico <- densidad_transportes %>%
+  select(distrito_limpio, densidad_EMT, densidad_FGV, densidad_Valenbisi) %>%
+  pivot_longer(cols = starts_with("densidad_"), 
+               names_to = "Tipo_Transporte", 
+               values_to = "Densidad") %>%
+  mutate(Tipo_Transporte = str_remove(Tipo_Transporte, "densidad_"))
+
+# Orden de los distritos de mayor a menor en el gráfico
+df_grafico$distrito_limpio <- factor(df_grafico$distrito_limpio, levels = densidad_transportes$distrito_limpio)
+
+# Creamos el gráfico de barras apiladas
+grafico_movilidad <- ggplot(df_grafico, aes(y = distrito_limpio, x = Densidad, fill = Tipo_Transporte)) +
+  geom_col() +
+  scale_fill_manual(values = c("EMT" = "#E3120B", "FGV" = "#F2A900", "Valenbisi" = "#00A550")) +
+  labs(
+    title = "Accesibilidad al Transporte Público en València",
+    subtitle = "Paradas y estaciones por cada 1.000 habitantes (Modelo 15 min)",
+    y = "Distrito",  # Ojo, ahora la Y es el distrito
+    x = "Densidad de Transporte (por 1.000 hab.)", # Y la X es la densidad
+    fill = "Servicio"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.y = element_text(size = 9)
+  )
+
+# Mostramos el gráfico
+print(grafico_movilidad)
+
+
+```
+```{r, fig.height=8, fig.width=10}
+
+#calcular areas a partir de distritos-sf (algunas se repiten porque tienen areas separadas en el mapa)
+
+#sumar todas las areas de los distritos que tengan el mismo nomrbre
+
+#juntar los resultados con densidad_transporte y calcular paradas_por_km2 = Total_Transporte / area_km2, score_transporte_pesado = (FGV * 3 + EMT * 2 + Valenbisi * 1) / area_km2
+
+# ==========================================
+
+# SOLUCIÓN DE ÁREAS SEPARADAS (MULTI-POLÍGONOS)
+
+# ==========================================
+library(sf)
+library(dplyr)
+
+densidad_transportes <- densidad_transportes %>%
+  mutate(
+    paradas_por_km2         = (Total_Transporte / Total) * 1000,
+    score_transporte_pesado = ((FGV * 3 + EMT * 2 + Valenbisi * 1) / Total) * 1000,
+    dens_EMT_km2            = (EMT / Total) * 1000,
+    dens_FGV_km2            = (FGV / Total) * 1000,
+    dens_Valenbisi_km2      = (Valenbisi / Total) * 1000
+  )
+
+
+```
+
+```{r}
+df_grafico <- densidad_transportes %>%
+
+  select(distrito_limpio, dens_EMT_km2, dens_FGV_km2, dens_Valenbisi_km2) %>%
+
+  pivot_longer(cols = starts_with("dens_"), 
+
+               names_to = "Tipo_Transporte", 
+
+               values_to = "Densidad") %>%
+
+  mutate(Tipo_Transporte = str_remove(Tipo_Transporte, "dens_"),
+
+         Tipo_Transporte = str_remove(Tipo_Transporte, "_km2"))
+
+
+
+# 4.3. Ordenamos los distritos de MAYOR a MENOR según su Score General
+
+# Usamos reorder para que el gráfico quede perfectamente escalonado
+
+df_grafico$distrito_limpio <- factor(
+
+  df_grafico$distrito_limpio, 
+
+  levels = densidad_transportes$distrito_limpio[order(densidad_transportes$score_transporte_pesado)]
+
+)
+
+
+
+# 4.4. Creamos el gráfico (Método moderno, la Y es el distrito)
+
+grafico_movilidad <- ggplot(df_grafico, aes(y = distrito_limpio, x = Densidad, fill = Tipo_Transporte)) +
+
+  geom_col() +
+
+  scale_fill_manual(values = c("EMT" = "#E3120B", "FGV" = "#F2A900", "Valenbisi" = "#00A550")) +
+
+  labs(
+
+    title = "Densidad de la Red de Transporte en València",
+
+    subtitle = "Paradas y estaciones por cada 1.000 habitantes",
+
+    y = "Distrito",  
+
+    x = "Paradas por 1.000 habitantes", 
+
+    fill = "Servicio"
+
+  ) +
+
+  theme_minimal() +
+
+  theme(
+
+    legend.position = "bottom",
+
+    plot.title = element_text(face = "bold", size = 14),
+
+    axis.text.y = element_text(size = 9)
+
+  )
+
+
+
+print(grafico_movilidad)
+
+
+```
+
+```{r}
+analisis_cruzado <- analisis_objetivo1 %>%
+  mutate(distrito = as.character(distrito)) %>%
+  rename(distrito_limpio = distrito) %>%
+  inner_join(densidad_transportes, by = "distrito_limpio")
+
+grafico_cuadrantes <- ggplot(analisis_cruzado, 
+                             aes(x = indice_final, 
+                                 y = score_transporte_pesado, 
+                                 label = distrito_limpio)) +
+  geom_point(color = "#2c3e50", size = 4, alpha = 0.7) +
+  geom_text(vjust = -1.5, size = 3, fontface = "bold") +
+  geom_vline(xintercept = mean(analisis_cruzado$indice_final, na.rm = TRUE), 
+             linetype = "dashed", color = "#e74c3c", linewidth = 1) +
+  geom_hline(yintercept = mean(analisis_cruzado$score_transporte_pesado, na.rm = TRUE), 
+             linetype = "dashed", color = "#e74c3c", linewidth = 1) +
+  labs(
+    title = "Resiliencia Urbana: Servicios vs. Transporte",
+    subtitle = "Cuadrante Superior Izquierdo: Faltan servicios, pero el transporte compensa la carencia",
+    x = "Índice de Servicios (Objetivo 1)",
+    y = "Densidad de Transporte Pesado por 1.000 habitantes (Objetivo 2)"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold", size = 14))
+
+grafico_cuadrantes
+```
+
+**OBJETIVO 3:**
+
+**CLUSTERING:**
+```{r}
+# 1. Preparar los datos exactos para el modelo
+# K-Means solo acepta números, así que seleccionamos SOLO las columnas escaladas (z_score)
+datos_clustering <- matriz_analitica %>%
+  select(z_bancos, z_bibliotecas, z_colegios, z_farmacias, z_comisarias, z_centrocomerciales, z_hospitales, z_parkings, z_monumentosturisticos, z_bomberos, z_peluquerias, z_polideportivos, z_restaurantes, z_supermercados, z_universidades)
+
+# 2. Fijar la semilla (MUY IMPORTANTE)
+# K-Means tiene un componente aleatorio al empezar. Fijar la semilla asegura 
+# que siempre te salgan los mismos resultados cada vez que le des a "Knit".
+set.seed(123)
+
+# 3. Entrenar el modelo K-Means
+# Le pedimos 3 grupos (centers = 3). 
+# nstart = 25 hace que el algoritmo pruebe 25 configuraciones iniciales y se quede la mejor.
+modelo_kmeans <- kmeans(datos_clustering, centers = 3, nstart = 25)
+
+# 4. Pegar el resultado a nuestra matriz original
+distritos_clasificados <- matriz_analitica %>%
+  mutate(
+    # Guardamos a qué clúster pertenece cada distrito (1, 2 o 3)
+    # Lo convertimos a "factor" (categoría) para que los gráficos queden mejor luego
+    cluster_15min = as.factor(modelo_kmeans$cluster) 
+  )
+
+# 5. INTERPRETACIÓN: ¿Qué significa cada clúster?
+# Hacemos una tabla resumen con la media de servicios REALES por cada grupo
+resumen_clusters <- distritos_clasificados %>%
+  group_by(cluster_15min) %>%
+  summarise(
+    num_distritos = n(),
+    media_bancos = round(mean(total_bancos), 1),
+    media_bibliotecas = round(mean(total_bibliotecas), 1),
+    media_colegios = round(mean(total_colegios), 1),
+    media_farmacias = round(mean(total_farmacias), 1),
+    media_comisarias = round(mean(total_comisarias), 1),
+    media_centrocomercial = round(mean(total_centrocomercial), 1),
+    media_hospitales = round(mean(total_hospitales), 1),
+    media_parkings = round(mean(total_parkings), 1),
+    media_monumentosturisticos = round(mean(total_monumentosturisticos), 1),
+    media_bomberos = round(mean(total_bomberos), 1),
+    media_peluquerias = round(mean(total_peluquerias), 1),
+    media_polideportivos = round(mean(total_polideportivos), 1),
+    media_restaurantes = round(mean(total_restaurantes), 1),
+    media_supermercados = round(mean(total_supermercados), 1),
+    media_universidades = round(mean(total_universidades), 1)
+  )
+
+# Ver el resumen para bautizar los clústeres
+print(resumen_clusters)
+
+# Guardar el dataset final con los clústeres asignados
+write.csv2(distritos_clasificados, "distritos_clasificados.csv", row.names = FALSE)
+```
+
+Para abordar el Objetivo 2 del estudio (Clasificación del perfil de accesibilidad de los distritos), se implementó un modelo de aprendizaje no supervisado mediante el algoritmo K-Means. Se utilizó exclusivamente el subconjunto de variables estandarizadas (Z-scores) para garantizar una evaluación geométrica equidistante de todas las infraestructuras. Se determinó k=3 como hiperparámetro óptimo para segmentar la ciudad en tres perfiles urbanos diferenciados: alta, media y baja dotación de servicios.
+
+Para garantizar la reproducibilidad de la investigación, se fijó una semilla generadora de números aleatorios (set.seed) y se iteró el algoritmo con 25 configuraciones iniciales (nstart=25). La agregación final de las etiquetas del clúster a la matriz original permitió descubrir patrones latentes de desigualdad espacial en Valencia, identificando claramente qué zonas actúan como 'hubs' de servicios y cuáles representan áreas de exclusión o dependencia urbana que no cumplen con el paradigma de los 15 minutos.
+
+El algoritmo K-Means segmentó los 19 distritos de Valencia en tres perfiles urbanos altamente diferenciados. El análisis de los centroides (medias de equipamientos) permite interpretar la topología de la ciudad:
+
+*Clúster 1 (Barrios Consolidados - 4 distritos): Representa el éxito del modelo de los 15 minutos. Muestra una hiper-concentración de servicios esenciales para la habitabilidad diaria, destacando en infraestructura educativa (media de 48 colegios) y abastecimiento (28 supermercados).
+
+*Clúster 2 (Periferia y Zonas Dormitorio - 14 distritos): Agrupa a la gran mayoría de la ciudad. Presenta un perfil de baja densidad de servicios, evidenciando carencias relativas en dotación financiera, cultural y comercial respecto a otras zonas.
+
+*Clúster 3 (Hub Turístico/Comercial - 1 distrito): Aísla el centro histórico de la ciudad, caracterizado por una anomalía estadística en servicios de ocio (274 restaurantes) y patrimonio (113 monumentos turísticos), pero con deficiencias en servicios residenciales básicos como supermercados o polideportivos.
+
+```{r}
+# 1. Recuperar las coordenadas de los distritos
+# Como en el K-Means perdimos la latitud y longitud, las volvemos a unir
+# usando tu tabla original de distritos limpios
+distritos_mapa <- distritos_clasificados %>%
+  left_join(distritos_unicos, by = c("distrito_asignado" = "nombre")) %>%
+  # Asegurarnos de que las coordenadas son números (por si tienen comas en vez de puntos)
+  mutate(
+    latitud = as.numeric(gsub(",", ".", latitud)),
+    longitud = as.numeric(gsub(",", ".", longitud))
+  )
+
+# 2. Crear una paleta de colores personalizada para los 3 clústeres
+# Ajusta los colores según tu interpretación (ej: Verde = Bueno, Naranja = Medio, Rojo = Malo)
+paleta_clusters <- colorFactor(
+  palette = c("#27ae60", "#f39c12", "#c0392b"), # Verde, Naranja, Rojo
+  domain = distritos_mapa$cluster_15min
+)
+
+# 3. Dibujar el mapa interactivo
+mapa_15min <- leaflet(data = distritos_mapa) %>%
+  
+  # Añadir el mapa base de las calles (tipo Google Maps)
+  addProviderTiles(providers$Esri.WorldStreetMap) %>%
+  
+  # Añadir un círculo por cada distrito
+  addCircleMarkers(
+    lng = ~longitud, 
+    lat = ~latitud,
+    
+    # Colorear según el clúster al que pertenece
+    color = ~paleta_clusters(cluster_15min),
+    fillOpacity = 0.8,
+    radius = 12, # Tamaño del círculo
+    stroke = FALSE,
+    
+    # ¡LA MAGIA! Al hacer clic en un círculo, saldrá este texto emergente
+    popup = ~paste0(
+      "<b>Distrito: </b>", distrito_asignado, "<br>",
+      "<b>Clúster Asignado: </b>", cluster_15min, "<br>",
+      "<b>Colegios: </b>", total_colegios, "<br>",
+      "<b>Bancos: </b>", total_bancos, "<br>",
+      "<b>Bibliotecas: </b>", total_bibliotecas, "<br>",
+      "<b>Farmacias: </b>", total_farmacias, "<br>",
+      "<b>Comisarias: </b>", total_comisarias, "<br>",
+      "<b>Centros Comerciales: </b>", total_centrocomercial, "<br>",
+      "<b>Hospitales: </b>", total_hospitales, "<br>",
+      "<b>Parkings: </b>", total_parkings, "<br>",
+      "<b>Monumentos turísticos: </b>", total_monumentosturisticos, "<br>",
+      "<b>Parques de bomberos: </b>", total_bomberos, "<br>",
+      "<b>Peluquerías: </b>", total_peluquerias, "<br>",
+      "<b>Zonas deportivas: </b>", total_polideportivos, "<br>",
+      "<b>Restaurantes: </b>", total_restaurantes, "<br>",
+      "<b>Supermercados: </b>", total_supermercados, "<br>",
+      "<b>Universidades: </b>", total_universidades, "<br>"
+    )
+  ) %>%
+  
+  # Añadir una leyenda para entender los colores
+  addLegend(
+    position = "bottomright",
+    pal = paleta_clusters,
+    values = ~cluster_15min,
+    title = "Tipología de Barrio<br>(K-Means)",
+    opacity = 1
+  )
+
+# Mostrar el mapa
+mapa_15min
+```
+Para satisfacer el objetivo de Evaluación Espacial (Objetivo 1) y facilitar la divulgación de los resultados (Data Storytelling), se implementó una visualización geoespacial interactiva utilizando la librería leaflet. Se integraron las coordenadas de los centroides distritales con las etiquetas generadas por el modelo K-Means, aplicando una codificación visual por color (Color Mapping) para diferenciar las tres tipologías urbanas detectadas. Esta representación cartográfica permite constatar visualmente las dinámicas centro-periferia, demostrando empíricamente cómo el tejido urbano que cumple los preceptos de la 'Ciudad de los 15 minutos' se concentra en núcleos específicos, mientras que las zonas de carencia se distribuyen en el anillo exterior, aportando un gran valor analítico para futuras políticas de planificación urbana.
+
+
+## **MAPA SERVICIOS PRÓXIMOS (con segmentador por edad):**
+
+Para trasladar el análisis descriptivo a una solución práctica de impacto ciudadano, se desarrolló una aplicación web interactiva implementando el framework R Shiny. Esta herramienta permite evaluar la accesibilidad en tiempo real mediante programación reactiva.
+
+Al capturar el evento de interacción del usuario (coordenadas de clic sobre el mapa leaflet), el motor espacial calcula matricialmente la distancia euclidiana georreferenciada (st_distance) hacia todos los equipamientos de la base de datos maestra. El algoritmo identifica el vecino más cercano (Nearest Neighbor) de cada categoría y evalúa si la distancia es inferior al umbral de viabilidad peatonal de 15 minutos (1.250 metros, asumiendo una velocidad de marcha de 5 km/h). Aquellos servicios que cumplen la condición son representados cartográficamente mediante polilíneas de conexión directa, traduciendo instantáneamente la distancia espacial en coste temporal para el usuario.
+
+```{r}
+# ==========================================
+# 1. CARGA Y PREPARACIÓN DE DATOS
+# ==========================================
+
+# 1. Servicios y Transporte Global
+servicios_sf <- st_as_sf(read.csv2(paste0("dataset_global_servicios.csv")), coords = c("longitud", "latitud"), crs = 4326)
+transporte_sf <- st_as_sf(read.csv2(paste0("dataset_global_transporte.csv")), coords = c("longitud", "latitud"), crs = 4326)
+
+# 2. DATASET LIMPIO EMT (El que contiene las líneas por parada)
+# OJO: Cambia "dataset_emt_limpio.csv" por el nombre real de tu archivo
+emt_info_lineas <- read.csv2(paste0("DATOS LIMPIOS DEFINITIVOS/emt.csv")) 
+# Nos aseguramos de que las coordenadas sean números por si tienen comas
+emt_info_lineas$longitud <- as.numeric(gsub(",", ".", emt_info_lineas$longitud))
+emt_info_lineas$latitud <- as.numeric(gsub(",", ".", emt_info_lineas$latitud))
+# Lo convertimos a formato espacial para el cruce
+emt_sf <- st_as_sf(emt_info_lineas, coords = c("longitud", "latitud"), crs = 4326)
+
+# --- METROVALENCIA ---
+# CAMBIA "metro.csv" por el nombre real de tu archivo de metro
+metro_info <- read.csv2(paste0("DATOS LIMPIOS DEFINITIVOS/fgv-bocas.csv")) 
+metro_info$longitud <- as.numeric(gsub(",", ".", metro_info$longitud))
+metro_info$latitud <- as.numeric(gsub(",", ".", metro_info$latitud))
+metro_sf <- st_as_sf(metro_info, coords = c("longitud", "latitud"), crs = 4326)
+
+# 3. GeoJSON de Líneas y Distritos
+bus_lines_sf <- st_read(paste0("DATOS ORIGINALES/DATOS ORIGINALES/lineasemt.geojson"), quiet = TRUE) %>% st_transform(4326)
+metro_lines_sf <- st_read(paste0("DATOS ORIGINALES/DATOS ORIGINALES/lineasmetro.geojson"), quiet = TRUE) %>% st_transform(4326)
+distritos_sf <- st_read(paste0("DATOS ORIGINALES/DATOS ORIGINALES/distritos_poligonos.geojson"), quiet = TRUE) %>% st_transform(4326)
+
+# ==========================================
+# 2. INTERFAZ DE USUARIO (UI) - Sin cambios
+# ==========================================
+ui <- fluidPage(
+  titlePanel("Valencia 15 min: Servicios y Transporte Inclusivo"),
+  sidebarLayout(
+    sidebarPanel(
+      h4("Perfil del Usuario"),
+      selectInput("perfil_edad", "Grupo de Edad:",
+                  choices = c("Joven" = "joven", "Adulto" = "adulto", "Anciano" = "anciano"),
+                  selected = "adulto"),
+      hr(),
+      h4("Capa de Visualización"),
+      selectInput("tipo_mapa", "Ver puntos de:",
+                  choices = c("Servicios Básicos" = "servicios", "Red de Transporte" = "transporte"),
+                  selected = "servicios"),
+      hr(),
+      uiOutput("panel_resultados")
+    ),
+    mainPanel(leafletOutput("mapa_interactivo", height = "650px"))
+  )
+)
+
+# ==========================================
+# 3. SERVIDOR (LÓGICA)
+# ==========================================
+server <- function(input, output, session) {
+  
+  output$mapa_interactivo <- renderLeaflet({
+    paleta_distritos <- colorFactor(topo.colors(nrow(distritos_sf)), distritos_sf$nombre)
+    leaflet() %>%
+      addTiles() %>%
+      setView(lng = -0.376, lat = 39.470, zoom = 12) %>%
+      addPolygons(data = distritos_sf, fillColor = ~paleta_distritos(nombre), 
+                  weight = 2, color = "white", fillOpacity = 0.3, label = ~nombre, group = "capa_distritos")
+  })
+  
+  # Observar cambios en Clic, Edad o Tipo de Mapa
+  observeEvent(list(input$mapa_interactivo_click, input$perfil_edad, input$tipo_mapa), {
+    
+    req(input$mapa_interactivo_click)
+    
+    # 1. Parámetros de Ubicación
+    clic_lng <- input$mapa_interactivo_click$lng
+    clic_lat <- input$mapa_interactivo_click$lat
+    punto_usuario <- st_sfc(st_point(c(clic_lng, clic_lat)), crs = 4326)
+    
+    # 2. Configuración según Edad
+    config <- switch(input$perfil_edad,
+                     "joven"   = list(vel = 83.3,  u = 1250, col = "#1abc9c"),
+                     "adulto"  = list(vel = 66.6, u = 1000, col = "#3498db"),
+                     "anciano" = list(vel = 50, u = 750,  col = "#e67e22"))
+    
+    # 3. Selección del Dataset según el Segmentador
+    datos_analizar <- if(input$tipo_mapa == "servicios") servicios_sf else transporte_sf
+    titulo_seccion <- if(input$tipo_mapa == "servicios") "Servicios Cercanos" else "Paradas de Transporte"
+    
+    # 4. Procesamiento Espacial
+    mapa_actualizado <- leafletProxy("mapa_interactivo") %>%
+      clearMarkers() %>% clearGroup("dinamico") %>%
+      addCircleMarkers(lng = clic_lng, lat = clic_lat, color = "black", radius = 6) %>%
+      addCircles(lng = clic_lng, lat = clic_lat, radius = config$u, 
+                 color = config$col, fillOpacity = 0.1, weight = 2, group = "dinamico")
+    
+    texto_resumen <- paste0("<h4>", titulo_seccion, "</h4>")
+    tipos_en_data <- unique(datos_analizar$tipo_servicio)
+    
+    for(tipo in tipos_en_data) {
+      subset_data <- datos_analizar %>% filter(tipo_servicio == tipo)
+      distancias <- st_distance(punto_usuario, subset_data)
+      
+      idx <- which.min(distancias)
+      d_min <- as.numeric(distancias[idx])
+      t_min <- round(d_min / config$vel, 1)
+      
+      if(d_min <= config$u) {
+        # === 1. ESTÁ A MENOS DE 15 MIN: DIBUJAMOS LA PARADA ===
+        coords <- st_coordinates(subset_data[idx, ])
+        texto_resumen <- paste0(texto_resumen, "✅ <b>", tipo, ":</b> ", t_min, " min (", round(d_min), "m)<br>")
+        
+        mapa_actualizado <- mapa_actualizado %>%
+          addMarkers(lng = coords[1], lat = coords[2], popup = as.character(subset_data$nombre_servicio[idx]), group = "dinamico") %>%
+          addPolylines(lng = c(clic_lng, coords[1]), lat = c(clic_lat, coords[2]), color = config$col, weight = 1.5, group = "dinamico")
+        
+        # --- LÓGICA DE TRANSPORTE (EMT Y METRO) ---
+        if(input$tipo_mapa == "transporte") {
+          
+          # CASO A: SI ES EMT
+          if(str_detect(toupper(tipo), "EMT")) {
+            idx_emt <- which.min(st_distance(punto_usuario, emt_sf))
+            lineas_lista <- str_split(as.character(emt_sf$lineas[idx_emt]), "[, /]+")[[1]] %>% str_trim()
+            lineas_visibles <- bus_lines_sf %>% filter(ref %in% lineas_lista)
+            
+            if(nrow(lineas_visibles) > 0) {
+              mapa_actualizado <- mapa_actualizado %>%
+                addPolylines(data = lineas_visibles, color = "#e74c3c", weight = 4, opacity = 0.8, group = "dinamico", label = ~paste("Línea Bus:", ref))
+            }
+          }
+          
+          # CASO B: SI ES METROVALENCIA
+          if(str_detect(toupper(tipo), "METRO")) {
+            idx_metro <- which.min(st_distance(punto_usuario, metro_sf))
+            lineas_lista <- str_split(as.character(metro_sf$lineas[idx_metro]), "[, /]+")[[1]] %>% str_trim()
+            
+            # Buscamos en el GeoJSON de Metro (asegúrate de que la columna se llame 'ref' o 'name')
+            lineas_visibles <- metro_lines_sf %>% filter(ref %in% lineas_lista)
+            
+            if(nrow(lineas_visibles) > 0) {
+              mapa_actualizado <- mapa_actualizado %>%
+                addPolylines(data = lineas_visibles, color = "#2c3e50", weight = 5, opacity = 0.9, group = "dinamico", label = ~paste("Línea Metro:", ref))
+            }
+          }
+        }
+        
+      } else {
+        # === 3. ESTÁ LEJOS: SOLO AVISAMOS POR TEXTO ===
+        texto_resumen <- paste0(texto_resumen, "❌ <span style='color:red;'><b>", tipo, ":</b> a ", t_min, " min (", round(d_min), "m) </span><br>")
+      }
+    }
+    output$panel_resultados <- renderUI({ HTML(texto_resumen) })
+  })
+}
+
+shinyApp(ui, server)
+```
+
+Para integrar el principio de Equidad Poblacional, la herramienta interactiva fue dotada de un motor de cálculo diferenciado por perfiles de edad. Reconociendo que el isócrono de 15 minutos es una variable dependiente de la capacidad motriz del individuo, se implementó un segmentador que parametriza la velocidad de marcha (Joven: 6km/h; Adulto: 5km/h; Anciano: 3.5km/h).
+
+Esta funcionalidad permite evidenciar un fenómeno crítico en el urbanismo valenciano: barrios que cumplen el estándar para un adulto joven pueden resultar excluyentes para la población de la tercera edad, duplicando sus tiempos de acceso y reduciendo su autonomía. El mapa resultante adapta dinámicamente el radio de influencia (buffer) y las polilíneas de conexión, proporcionando un diagnóstico personalizado que subraya la necesidad de una infraestructura urbana distribuida bajo criterios de diseño universal.
+
+La integración de una arquitectura de datos dual (Servicios vs. Transporte) en la herramienta de diagnóstico permite evaluar la ciudad desde una perspectiva de resiliencia urbana. Mientras que el mapa de servicios identifica las áreas de necesidad inmediata (donde el ciudadano desarrolla su vida cotidiana), el mapa de transporte revela la capacidad de la red pública para mitigar dichas carencias. Esta distinción es fundamental: un distrito con baja cobertura de servicios puede ser viable si su red de transporte (Metro, EMT, Valenbisi) permite al ciudadano acceder a nodos de servicios externos en los mismos tiempos isócronos, cumpliendo así el objetivo de una ciudad conectada y sostenible.
+
+
+## **Definición de distritos que cumplen con el modelo (sin tener en cuenta la edad):**
+
+```{r}
+# 1. PROYECCIÓN A METROS
+distritos_proj <- st_transform(distritos_sf, 25830)
+servicios_proj <- st_transform(servicios_sf, 25830)
+
+# 2. GENERAR MENOS PUNTOS DE MUESTREO (15 puntos + el centro = 16 por distrito)
+set.seed(42) 
+puntos_muestra <- distritos_proj %>%
+  st_sample(size = rep(15, nrow(distritos_proj)), type = "regular") %>%
+  st_sf() %>%
+  st_join(distritos_proj)
+
+centros <- st_centroid(distritos_proj)
+todos_puntos_evaluar <- bind_rows(puntos_muestra, centros)
+
+# 3. MEDIR DISTANCIAS AL SERVICIO MÁS CERCANO (Igual que antes)
+tipos_servicio <- unique(servicios_proj$tipo_servicio)
+total_tipos_servicio <- length(tipos_servicio) # Guardamos el total de servicios globales
+UMBRAL <- 1250 # 1250 metros = 15 minutos caminando
+
+resultados_puntos <- todos_puntos_evaluar
+
+for(tipo in tipos_servicio) {
+  servicios_tipo <- servicios_proj %>% filter(tipo_servicio == tipo)
+  distancias_matriz <- st_distance(resultados_puntos, servicios_tipo)
+  resultados_puntos[[paste0("dist_", tipo)]] <- as.numeric(apply(distancias_matriz, 1, min))
+}
+
+# 4. CALCULAR EL PORCENTAJE INDIVIDUAL DE CADA PUNTO
+columnas_dist <- grep("dist_", names(resultados_puntos), value = TRUE)
+
+resultados_puntos <- resultados_puntos %>%
+  rowwise() %>%
+  mutate(
+    # ¿A cuántos servicios llega este punto en menos de 15 mins? (Suma de condiciones verdaderas)
+    num_servicios_alcanzados = sum(c_across(all_of(columnas_dist)) <= UMBRAL),
+    
+    # Su porcentaje personal (ej. si llega a 12 de 15 servicios = 80%)
+    pct_servicios_alcanzados = (num_servicios_alcanzados / total_tipos_servicio) * 100
+  ) %>%
+  ungroup()
+
+# 5. EL CÁLCULO FINAL: La media del distrito
+ranking_15min_flexible <- resultados_puntos %>%
+  st_drop_geometry() %>% 
+  group_by(nombre) %>%   # O la columna donde esté el nombre del distrito
+  summarise(
+    puntos_evaluados = n(),
+    # Media de servicios físicos a los que llegan los ciudadanos de este distrito
+    media_servicios_alcanzados = round(mean(num_servicios_alcanzados), 1),
+    
+    # LA NOTA DEL DISTRITO: La media de los porcentajes de sus puntos
+    indice_ciudad_15min_pct = round(mean(pct_servicios_alcanzados), 1)
+  ) %>%
+  arrange(desc(indice_ciudad_15min_pct)) # Ordenar de mayor a menor nota
+
+# Ver la tabla
+print(ranking_15min_flexible)
+
+# ---------------------------------------------------------
+# EXTRA: GRÁFICO DE BARRAS DEL RANKING PARA TU MEMORIA
+# ---------------------------------------------------------
+ggplot(ranking_15min_flexible, aes(x = reorder(nombre, indice_ciudad_15min_pct), y = indice_ciudad_15min_pct, fill = indice_ciudad_15min_pct)) +
+   geom_bar(stat = "identity") +
+   coord_flip() + # Barras horizontales para leer bien los nombres
+   scale_fill_gradient(low = "#e74c3c", high = "#2ecc71", name = "Índice (%)") +
+   labs(
+     title = "Índice de la Ciudad de los 15 Minutos en Valencia",
+     subtitle = "Porcentaje medio de servicios accesibles a pie por distrito",
+     x = "Distrito",
+     y = "Índice de Accesibilidad (%)"
+   ) +
+   theme_minimal()
+```
+
+
+## **Definición de distritos que cumplen con el modelo (según la edad):**
+
+```{r}
+# 1. DEFINICIÓN DE PESOS Y UMBRALES DINÁMICOS
+pesos_servicios <- tribble(
+  ~tipo_servicio,        ~w_jov, ~w_adu, ~w_anc,
+  "Colegio",             1.0,    0.5,    0.1, 
+  "Universidad",         1.0,    0.5,    0.1,
+  "Farmacia",            0.2,    0.8,    1.0, 
+  "Hospital",            0.5,    0.8,    1.0,
+  "Banco",               0.1,    1.0,    0.8, 
+  "Supermercado",        0.5,    1.0,    1.0,
+  "Polideportivo",       1.0,    0.8,    0.5, 
+  "Biblioteca",          1.0,    0.5,    0.2,
+  "Parques Bomberos",    0.1,    0.1,    0.1, 
+  "Peluqueria",          0.5,    0.5,    0.5,
+  "Restaurante",         0.5,    0.8,    0.6, 
+  "Centro Comercial",    1.0,    0.8,    0.5,
+  "Comisaria",           0.5,    0.5,    0.5, 
+  "Monumento Turistico", 0.5,    0.5,    0.5,
+  "Parking",             0.2,    1.0,    0.5
+)
+
+# Umbrales basados en velocidad (15 minutos caminando)
+umbral_joven <- 1250  # 5 km/h
+umbral_adulto <- 1000 # 4 km/h
+umbral_anciano <- 750 # 3 km/h
+
+# 2. PROYECCIÓN Y MUESTREO ESPACIAL
+distritos_proj <- st_transform(distritos_sf, 25830)
+servicios_proj <- st_transform(servicios_sf, 25830)
+
+set.seed(42) 
+puntos_muestra <- distritos_proj %>%
+  st_sample(size = rep(15, nrow(distritos_proj)), type = "regular") %>%
+  st_sf() %>%
+  st_join(distritos_proj) %>%
+  mutate(id_punto = row_number()) # Identificador único para cada punto
+
+centros <- st_centroid(distritos_proj) %>% mutate(id_punto = max(puntos_muestra$id_punto) + row_number())
+todos_puntos <- bind_rows(puntos_muestra, centros)
+
+# 3. CÁLCULO DE DISTANCIAS FÍSICAS AL SERVICIO MÁS CERCANO
+tipos_servicio <- unique(servicios_proj$tipo_servicio)
+resultados_distancias <- todos_puntos
+
+for(tipo in tipos_servicio) {
+  servicios_tipo <- servicios_proj %>% filter(tipo_servicio == tipo)
+  
+  # Solo medimos si el servicio existe en los datos
+  if(nrow(servicios_tipo) > 0) {
+    dist_matriz <- st_distance(resultados_distancias, servicios_tipo)
+    resultados_distancias[[paste0("dist_", tipo)]] <- as.numeric(apply(dist_matriz, 1, min))
+  }
+}
+
+# 4. LA MAGIA: PONDERACIÓN Y EVALUACIÓN DEMOGRÁFICA
+# Pasamos las columnas de distancia a filas para cruzarlas con la tabla de pesos
+puntos_largo <- resultados_distancias %>%
+  st_drop_geometry() %>%
+  pivot_longer(
+    cols = starts_with("dist_"),
+    names_to = "tipo_servicio",
+    names_prefix = "dist_",
+    values_to = "distancia"
+  ) %>%
+  # Unimos con tus pesos
+  left_join(pesos_servicios, by = "tipo_servicio") %>%
+  # Si algún servicio del dataset no está en la tabla de pesos, le ponemos 0 por seguridad
+  replace_na(list(w_jov = 0, w_adu = 0, w_anc = 0)) 
+
+# Evaluamos si alcanzan el servicio y multiplicamos por el peso
+evaluacion_puntos <- puntos_largo %>%
+  mutate(
+    # 1 si llega en 15 min, 0 si no llega
+    alcanzado_jov = ifelse(distancia <= umbral_joven, 1, 0),
+    alcanzado_adu = ifelse(distancia <= umbral_adulto, 1, 0),
+    alcanzado_anc = ifelse(distancia <= umbral_anciano, 1, 0),
+    
+    # Puntuación del servicio = (Alcanzado) * (Peso de importancia)
+    score_jov = alcanzado_jov * w_jov,
+    score_adu = alcanzado_adu * w_adu,
+    score_anc = alcanzado_anc * w_anc
+  )
+
+# 5. AGREGACIÓN: PUNTUACIÓN DE CADA PUNTO -> MEDIA DEL DISTRITO
+ranking_inclusivo <- evaluacion_puntos %>%
+  # Primero sumamos todos los puntos obtenidos por cada coordenada exacta
+  group_by(nombre, id_punto) %>% # Asume que 'nombre' es el distrito
+  summarise(
+    # Puntos obtenidos
+    total_score_jov = sum(score_jov),
+    total_score_adu = sum(score_adu),
+    total_score_anc = sum(score_anc),
+    # Puntos máximos posibles (suma total de pesos)
+    max_posible_jov = sum(w_jov),
+    max_posible_adu = sum(w_adu),
+    max_posible_anc = sum(w_anc),
+    .groups = "drop"
+  ) %>%
+  # Porcentaje individual del punto (ej. 8 de 10 puntos = 80%)
+  mutate(
+    pct_jov = (total_score_jov / max_posible_jov) * 100,
+    pct_adu = (total_score_adu / max_posible_adu) * 100,
+    pct_anc = (total_score_anc / max_posible_anc) * 100
+  ) %>%
+  # Agregamos calculando la media de los puntos por cada distrito
+  group_by(nombre) %>%
+  summarise(
+    indice_15min_Joven = round(mean(pct_jov), 1),
+    indice_15min_Adulto = round(mean(pct_adu), 1),
+    indice_15min_Anciano = round(mean(pct_anc), 1)
+  ) %>%
+  # Ordenamos usando al adulto como referencia media (puedes cambiarlo)
+  arrange(desc(indice_15min_Adulto))
+
+# Imprimir la tabla de resultados finales
+print(ranking_inclusivo)
+```
+
+```{r}
+# 1. Transformar los datos para el gráfico (De formato ancho a formato largo)
+ranking_largo <- ranking_inclusivo %>%
+  pivot_longer(
+    cols = starts_with("indice_"),
+    names_to = "Perfil",
+    values_to = "Indice",
+    names_prefix = "indice_15min_" # Quitamos el prefijo para que en la leyenda solo diga "Joven", "Adulto", etc.
+  ) %>%
+  # Ordenar los perfiles para que salgan en un orden lógico en la leyenda
+  mutate(Perfil = factor(Perfil, levels = c("Joven", "Adulto", "Anciano")))
+
+# 2. Crear el Gráfico de Barras Agrupadas
+grafico_inclusivo <- ggplot(ranking_largo, aes(x = reorder(nombre, Indice), y = Indice, fill = Perfil)) +
+  # position = "dodge" pone las barras una al lado de la otra, en vez de apiladas
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
+  
+  # Giramos el gráfico para que los nombres de los distritos se lean perfectamente
+  coord_flip() +
+  
+  # Colores personalizados
+  scale_fill_manual(values = c("Joven" = "#1abc9c", "Adulto" = "#3498db", "Anciano" = "#e67e22")) +
+  
+  # Títulos y etiquetas
+  labs(
+    title = "Brecha Demográfica en la Ciudad de los 15 Minutos (Valencia)",
+    subtitle = "Índice de accesibilidad ponderado según el perfil de edad y velocidad de marcha",
+    x = "Distrito",
+    y = "Índice de Accesibilidad Ponderado (%)",
+    fill = "Perfil Poblacional"
+  ) +
+  
+  # Estilo limpio y profesional
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold", size = 14),
+    axis.text.y = element_text(size = 10)
+  )
+
+# 3. Mostrar el gráfico
+print(grafico_inclusivo)
+```
+
+
+Para evaluar la calidad de vida urbana de manera inclusiva, se superó el modelo de conteo absoluto mediante el diseño de un Índice de Accesibilidad Universal Ponderado. Se estructuró un sistema de pesos (weights) que evalúa la relevancia asimétrica de 15 tipos de equipamientos según tres perfiles demográficos (Jóvenes, Adultos y Ancianos). Por ejemplo, los servicios sanitarios y de abastecimiento primario (farmacias, supermercados) recibieron máxima ponderación (1.0) para la tercera edad, frente a equipamientos educativos o deportivos.
+
+Este sistema de valoración se cruzó espacialmente con isócronas dinámicas dependientes de la capacidad motriz de cada cohorte (1250m, 1000m y 700m respectivamente). La transformación de la matriz de distancias mediante pivot_longer permitió calcular algorítmicamente el porcentaje de satisfacción de necesidades para cada punto de muestreo intra-distrital. La agregación resultante demuestra empíricamente la exclusión espacial latente: una misma trama urbana arroja índices de 'Ciudad de los 15 minutos' drásticamente inferiores para la población vulnerable, evidenciando que la accesibilidad es relativa a las características físicas del ciudadano.
+
+## Gráfica Indice 15 minutos distrito por edad y población:
+
+```{r}
+poblacion_raw <- read_xlsx("DATOS ORIGINALES/DATOS ORIGINALES/Poblacion_por_edad.xlsx", skip = 2)
+
+limpiar_distritos <- function(x) {
+  x1 <- str_remove(x, "^[0-9]+\\.\\s+")
+  x2 <- stri_trans_general(x1, "Latin-ASCII")
+  x3 <- str_to_upper(x2)
+  x4 <- str_replace(x3, "POBLES", "POBLATS")
+  x_final <- str_trim(x4)
+  return(x_final)
+}
+
+# Filtramos filas que empiezan por número (Distritos reales)
+poblacion_filt <- poblacion_raw[str_detect(poblacion_raw[[1]], "^\\s*[0-9]+"), ]
+
+# Limpiamos los nombres de los distritos
+poblacion_filt$distrito_asignado <- limpiar_distritos(poblacion_filt[[1]])
+
+# Agrupamos los tramos de edad (usamos rowSums para que sea legible)
+poblacion_filt$Jovenes  <- rowSums(poblacion_filt[, c("0 - 4", "5 - 9", "10 - 14", "15 - 19", "20 - 24")])
+poblacion_filt$Adultos  <- rowSums(poblacion_filt[, c("25 - 29", "30 -34", "35 - 39", "40 - 44", "45 - 49", "50 - 54", "55 - 59", "60 - 64")])
+poblacion_filt$Ancianos <- rowSums(poblacion_filt[, c("65 - 69", "70 - 74", "75 - 79", "80 - 84", "85 - 89", "≥ 90")])
+
+# Calculamos proporciones
+poblacion_filt$p_jov <- poblacion_filt$Jovenes / poblacion_filt$Total
+poblacion_filt$p_adu <- poblacion_filt$Adultos / poblacion_filt$Total
+poblacion_filt$p_anc <- poblacion_filt$Ancianos / poblacion_filt$Total
+
+poblacion <- poblacion_filt[1:19, c(2, 22:ncol(poblacion_filt))]
+```
+
+
+```{r}
+library(sf)
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(readxl) # Necesario para leer tu Excel de población
+
+# 1. DEFINICIÓN DE PESOS Y UMBRALES DINÁMICOS (Sin cambios)
+pesos_servicios <- tribble(
+  ~tipo_servicio,        ~w_jov, ~w_adu, ~w_anc,
+  "Colegio",             1.0,    0.5,    0.1, 
+  "Universidad",         1.0,    0.5,    0.1,
+  "Farmacia",            0.2,    0.8,    1.0, 
+  "Hospital",            0.5,    0.8,    1.0,
+  "Banco",               0.1,    1.0,    0.8, 
+  "Supermercado",        0.5,    1.0,    1.0,
+  "Polideportivo",       1.0,    0.8,    0.5, 
+  "Biblioteca",          1.0,    0.5,    0.2,
+  "Parques Bomberos",    0.1,    0.1,    0.1, 
+  "Peluqueria",          0.5,    0.5,    0.5,
+  "Restaurante",         0.5,    0.8,    0.6, 
+  "Centro Comercial",    1.0,    0.8,    0.5,
+  "Comisaria",           0.5,    0.5,    0.5, 
+  "Monumento Turistico", 0.5,    0.5,    0.5,
+  "Parking",             0.2,    1.0,    0.5
+)
+
+umbral_joven <- 1250  
+umbral_adulto <- 1000 
+umbral_anciano <- 750 
+
+# 2. PROYECCIÓN Y MUESTREO ESPACIAL
+distritos_proj <- st_transform(distritos_sf, 25830)
+servicios_proj <- st_transform(servicios_sf, 25830)
+
+set.seed(42) 
+puntos_muestra <- distritos_proj %>%
+  st_sample(size = rep(15, nrow(distritos_proj)), type = "regular") %>%
+  st_sf() %>%
+  st_join(distritos_proj) %>%
+  mutate(id_punto = row_number())
+
+centros <- st_centroid(distritos_proj) %>% mutate(id_punto = max(puntos_muestra$id_punto) + row_number())
+todos_puntos <- bind_rows(puntos_muestra, centros)
+
+# 3. CÁLCULO DE LA "CANTIDAD" DE SERVICIOS ALCANZABLES (NUEVA LÓGICA)
+tipos_servicio <- unique(servicios_proj$tipo_servicio)
+
+# Preparamos las columnas de puntuación
+resultados_distancias <- todos_puntos %>%
+  mutate(score_jov = 0, score_adu = 0, score_anc = 0)
+
+for(tipo in tipos_servicio) {
+  servicios_tipo <- servicios_proj %>% filter(tipo_servicio == tipo)
+  
+  if(nrow(servicios_tipo) > 0) {
+    dist_matriz <- st_distance(resultados_distancias, servicios_tipo)
+    
+    # MAGIA 1: En vez del más cercano, CONTAMOS CUÁNTOS servicios caen dentro del umbral
+    cnt_jov <- apply(dist_matriz, 1, function(x) sum(as.numeric(x) <= umbral_joven))
+    cnt_adu <- apply(dist_matriz, 1, function(x) sum(as.numeric(x) <= umbral_adulto))
+    cnt_anc <- apply(dist_matriz, 1, function(x) sum(as.numeric(x) <= umbral_anciano))
+    
+    # Buscamos el peso específico de este servicio
+    peso_j <- pesos_servicios$w_jov[pesos_servicios$tipo_servicio == tipo]
+    peso_a <- pesos_servicios$w_adu[pesos_servicios$tipo_servicio == tipo]
+    peso_an <- pesos_servicios$w_anc[pesos_servicios$tipo_servicio == tipo]
+    
+    if(length(peso_j) == 0) peso_j <- 0
+    if(length(peso_a) == 0) peso_a <- 0
+    if(length(peso_an) == 0) peso_an <- 0
+    
+    # MAGIA 2: Acumulamos los puntos (Cantidad de servicios multiplicada por su peso)
+    resultados_distancias$score_jov <- resultados_distancias$score_jov + (cnt_jov * peso_j)
+    resultados_distancias$score_adu <- resultados_distancias$score_adu + (cnt_adu * peso_a)
+    resultados_distancias$score_anc <- resultados_distancias$score_anc + (cnt_anc * peso_an)
+  }
+}
+
+# 4. AGREGACIÓN A NIVEL DE DISTRITO (Valores Absolutos Ponderados)
+ranking_absoluto <- resultados_distancias %>%
+  st_drop_geometry() %>%
+  group_by(nombre) %>% # 'nombre' es el distrito
+  summarise(
+    media_servicios_jov = mean(score_jov),
+    media_servicios_adu = mean(score_adu),
+    media_servicios_anc = mean(score_anc),
+    .groups = "drop"
+  )
+
+# 5. INTEGRACIÓN DE POBLACIÓN Y CÁLCULO POR 1.000 HABITANTES
+
+
+# Hacemos el cruce (join) y calculamos la ratio
+ranking_por_1000_hab <- ranking_absoluto %>%
+  # Ajusta "Distrito_Excel" al nombre real de la columna de distritos en tu Excel
+  left_join(poblacion, by = c("nombre" = "distrito_asignado")) %>%
+  mutate(
+    # FÓRMULA: (Media de servicios alcanzables) / (Población del grupo / 1000)
+    # Revisa que las columnas Pob_Joven, Pob_Adulto, Pob_Anciano se llamen así en tu Excel
+    ratio_1000hab_Joven = round(media_servicios_jov / (Jovenes / 1000), 2),
+    ratio_1000hab_Adulto = round(media_servicios_adu / (Adultos / 1000), 2),
+    ratio_1000hab_Anciano = round(media_servicios_anc / (Ancianos / 1000), 2)
+  ) %>%
+  # Ordenamos para ver qué distrito está mejor provisto para el adulto promedio
+  arrange(desc(ratio_1000hab_Adulto)) %>%
+  # Seleccionamos solo las columnas de resultados para que la tabla quede limpia
+  select(nombre, ratio_1000hab_Joven, ratio_1000hab_Adulto, ratio_1000hab_Anciano)
+
+# Imprimir el resultado final
+print(ranking_por_1000_hab)
+```
+
+
+Al realizar la primera evaluación del modelo de los 15 minutos basándonos únicamente en distancias absolutas (presencia o ausencia de servicios), Valencia parecía cumplir en gran medida los estándares de accesibilidad. Sin embargo, al introducir la variable demográfica y calcular la Tasa de Capacidad de Carga (servicios por cada 1.000 habitantes), los indicadores cayeron drásticamente.
+
+Este fenómeno demuestra que la proximidad geográfica es una ilusión de calidad de vida si no va acompañada de capacidad volumétrica. De nada sirve tener un centro de salud a 5 minutos a pie si este debe dar cobertura a una densidad poblacional inasumible. El modelo actual revela áreas de la ciudad que sufren de 'Saturación Silenciosa', donde el cumplimiento del isócrono de 15 minutos en el mapa enmascara listas de espera, hacinamiento y saturación real de los equipamientos.
+
+
+## Ratio de servicios y de transporte cada 1000 habitantes por distrito.
+
+```{r}
+# 1. Aseguramos proyecciones métricas
+distritos_proj <- st_transform(distritos_sf, 25830)
+servicios_proj <- st_transform(servicios_sf, 25830)
+
+# 2. CRUCE ESPACIAL (Puntos dentro de Polígonos)
+# st_join asocia cada punto de servicio al polígono del distrito en el que "cae"
+servicios_por_distrito <- st_join(servicios_proj, distritos_proj, join = st_intersects)
+
+# Agrupamos y contamos cuántos servicios FÍSICOS hay de cada tipo en cada distrito
+conteo_servicios <- servicios_por_distrito %>%
+  st_drop_geometry() %>%
+  # 'nombre' es el distrito de la capa geojson, 'tipo_servicio' es de tu csv
+  group_by(nombre, tipo_servicio) %>% 
+  summarise(cantidad_absoluta = n(), .groups = "drop") %>%
+  # Filtramos por si algún servicio cae en el mar o fuera de Valencia
+  filter(!is.na(nombre), !is.na(tipo_servicio))
+
+# 3. PREPARAR LA POBLACIÓN TOTAL
+
+# Calculamos la población total sumando los 3 grupos
+# (CAMBIA los nombres de las columnas si en tu Excel se llaman distinto)
+pob_total_df <- poblacion %>%
+  mutate(Pob_Total = Total) %>%
+  select(distrito_asignado, Pob_Total)
+
+# 4. EL CÁLCULO DEL RATIO
+ratios_por_servicio <- conteo_servicios %>%
+  left_join(pob_total_df, by = c("nombre" = "distrito_asignado")) %>%
+  mutate(
+    # FÓRMULA: (Cantidad del servicio / Población total del distrito) * 1000
+    ratio_1000 = round((cantidad_absoluta / Pob_Total) * 1000, 2)
+  )
+
+# 5. TABLA FINAL: FORMATO MATRIZ (Distritos en filas, Servicios en columnas)
+tabla_radiografia <- ratios_por_servicio %>%
+  select(nombre, tipo_servicio, ratio_1000) %>%
+  pivot_wider(
+    names_from = tipo_servicio,
+    values_from = ratio_1000,
+    values_fill = 0 # Si en un distrito no hay de ese servicio, le ponemos 0
+  )
+
+# Imprimimos la tabla
+print(tabla_radiografia)
+```
+
+Para complementar el análisis de accesibilidad peatonal (isócronas de 15 minutos), se ejecutó una Evaluación de Dotación Administrativa. Mediante una unión espacial matemática (st_join), se geolocalizaron y contabilizaron todos los equipamientos físicos presentes dentro de los límites administrativos de cada distrito. Al dividir estos conteos absolutos entre la población total censada y multiplicarlos por mil, obtenemos la Tasa de Dotación por cada 1.000 habitantes desglosada por tipología de servicio.
+
+Esta matriz radiográfica permite aislar el déficit urbano. Mientras que el análisis espacial global indicaba una falta generalizada de 'capacidad de carga', esta métrica específica señala con precisión quirúrgica qué infraestructuras faltan en cada barrio (por ejemplo, déficit sanitario vs. déficit educativo), proporcionando a la Administración Pública una hoja de ruta directa para futuras licitaciones y proyectos de regeneración urbana.
+
+
+```{r}
+# 1. Aseguramos proyecciones métricas
+distritos_proj <- st_transform(distritos_sf, 25830)
+transporte_proj <- st_transform(transporte_sf, 25830)
+
+# 2. CRUCE ESPACIAL (Puntos dentro de Polígonos)
+# st_join asocia cada punto de servicio al polígono del distrito en el que "cae"
+transporte_por_distrito <- st_join(transporte_proj, distritos_proj, join = st_intersects)
+
+# Agrupamos y contamos cuántos servicios FÍSICOS hay de cada tipo en cada distrito
+conteo_transporte <- transporte_por_distrito %>%
+  st_drop_geometry() %>%
+  # 'nombre' es el distrito de la capa geojson, 'tipo_servicio' es de tu csv
+  group_by(nombre, tipo_servicio) %>% 
+  summarise(cantidad_absoluta = n(), .groups = "drop") %>%
+  # Filtramos por si algún servicio cae en el mar o fuera de Valencia
+  filter(!is.na(nombre), !is.na(tipo_servicio))
+
+# 3. PREPARAR LA POBLACIÓN TOTAL
+
+# Calculamos la población total sumando los 3 grupos
+# (CAMBIA los nombres de las columnas si en tu Excel se llaman distinto)
+pob_total_df <- poblacion %>%
+  mutate(Pob_Total = Total) %>%
+  select(distrito_asignado, Pob_Total)
+
+# 4. EL CÁLCULO DEL RATIO
+ratios_por_transporte <- conteo_transporte %>%
+  left_join(pob_total_df, by = c("nombre" = "distrito_asignado")) %>%
+  mutate(
+    # FÓRMULA: (Cantidad del servicio / Población total del distrito) * 1000
+    ratio_1000 = round((cantidad_absoluta / Pob_Total) * 1000, 2)
+  )
+
+# 5. TABLA FINAL: FORMATO MATRIZ (Distritos en filas, Servicios en columnas)
+tabla_radiografia2 <- ratios_por_transporte %>%
+  select(nombre, tipo_servicio, ratio_1000) %>%
+  pivot_wider(
+    names_from = tipo_servicio,
+    values_from = ratio_1000,
+    values_fill = 0 # Si en un distrito no hay de ese servicio, le ponemos 0
+  )
+
+# Imprimimos la tabla
+print(tabla_radiografia2)
+```
+```{r}
+# Cargar las librerías necesarias
+library(leaflet)
+library(dplyr)
+library(readr)
+
+# 1. Cargar los datos globales de servicios
+# (Asegúrate de que la ruta coincida con donde tienes el archivo)
+servicios <- read_csv2("dataset_global_servicios.csv")
+# 1. Cargar las rutas (Asegúrate de poner la ruta correcta de los archivos descargados)
+rutas_emt_sf <- st_read("DATOS ORIGINALES/DATOS ORIGINALES/lineasemt.geojson")
+# Filtramos para quedarnos solo con geometrías de tipo línea
+rutas_emt_sf <- rutas_emt_sf[st_geometry_type(rutas_emt_sf) %in% c("LINESTRING","MULTILINESTRING"), ]
+rutas_metro_sf <- st_read("DATOS ORIGINALES/DATOS ORIGINALES/lineasmetro.geojson")
+rutas_metro_sf <- rutas_metro_sf[st_geometry_type(rutas_metro_sf) %in% c("LINESTRING","MULTILINESTRING"), ]
+# 2. Crear una paleta de colores para distinguir los servicios
+# "Set3" o "Paired" son buenas paletas cuando tienes muchas categorías distintas
+paleta_servicios <- colorFactor(palette = "Paired", domain = servicios$tipo_servicio)
+mapa_filtros <- leaflet(data = servicios) %>%
+  # Fondo del mapa
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  
+  # Añadir los PUNTOS de servicios
+  addCircleMarkers(
+    lng = ~longitud,
+    lat = ~latitud,
+    color = ~paleta_servicios(tipo_servicio),
+    radius = 5,
+    stroke = FALSE,
+    fillOpacity = 0.8,
+    popup = ~paste("<b>", nombre_servicio, "</b><br>",
+                   "Tipo: ", tipo_servicio, "<br>",
+                   "Distrito: ", distrito_asignado),
+    group = ~tipo_servicio
+  ) %>%
+  
+  # Añadir la leyenda abajo a la izquierda
+  addLegend(
+    position = "bottomleft", 
+    pal = paleta_servicios, 
+    values = ~tipo_servicio, 
+    title = "Categorías de Servicio",
+    opacity = 1
+  ) %>%
+  
+  # Añadir las LÍNEAS de la EMT
+  addPolylines(
+    data = rutas_emt_sf,
+    color = "#E3120B", 
+    weight = 2,        
+    opacity = 0.5,     
+    group = "Rutas Autobús EMT", 
+    # Ojo: En los datos de OSM la columna se llama 'name'
+    popup = ~paste("<b>Línea EMT:</b>", name) 
+  ) %>%
+  addPolylines(
+    data = rutas_metro_sf,
+    color = "#F2A900", # Naranja corporativo de FGV
+    weight = 2,
+    opacity = 0.5,
+    group = "Líneas Metrovalencia",
+    popup = ~paste("<b>Línea Metro:</b>", name)
+  ) %>%
+  
+  addLayersControl(
+    position = "topright",
+    # Juntamos los servicios únicos y la nueva capa de autobuses
+    overlayGroups = c(unique(servicios$tipo_servicio), "Rutas Autobús EMT", "Líneas Metrovalencia"),
+    options = layersControlOptions(collapsed = FALSE)
+  ) %>%
+
+  # Ocultar las rutasy servicios por defecto para elegir los deseados
+  hideGroup(c(servicios$tipo_servicio,"Rutas Autobús EMT", "Líneas Metrovalencia"))
+
+# Mostrar el mapa
+mapa_filtros
+```
+
+
+**1. El extremismo de la periferia: Dependencia total del autobús.**
+Los datos de Poblats del Nord (4.87) y Poblats del Sud (3.56) en la red de EMT son altísimos en comparación con el resto.
+
+¿Qué significa? Al ser zonas con muy poca densidad de población (pedanías) pero con una extensión geográfica enorme, tocan a muchas paradas por habitante. Sin embargo, este dato esconde una dependencia absoluta: tienen ratio 0 en Valenbisi y un acceso casi nulo al Metro (0.14 y 0.04). Son distritos cautivos del autobús, el cual a menudo tiene peores frecuencias en estas zonas.
+
+**2. El sesgo céntrico y universitario de Valenbisi:**
+La micromovilidad pública no es universal. La tabla demuestra claramente que Valenbisi favorece el centro histórico y las zonas estudiantiles.
+
+Los ganadores: Algirós (0.60), Ciutat Vella (0.59) y El Pla del Real (0.51) lideran el ratio.
+
+Los perdedores: Más allá de los poblados periféricos (que tienen 0), los barrios obreros como Jesús (0.20), Rascanya (0.22) o Benimaclet (0.24) tienen menos de la mitad de bicicletas per cápita que los distritos favorecidos. Valenbisi actualmente no funciona como herramienta de equidad espacial.
+
+**3. Los "Desiertos de Metro" en zonas de alta densidad:**
+El metro es el transporte de gran capacidad por excelencia, pero su distribución per cápita es muy desigual.
+
+El caso más sangrante es Quatre Carreres con un 0 absoluto en paradas de metro por cada 1.000 habitantes (a pesar de ser un distrito muy poblado, la llegada de la nueva Línea 10 puede no estar bien reflejada en los datos base o ser insuficiente para su enorme población).
+
+Otras zonas históricamente densas como L'Eixample (0.04), Patraix (0.03) o Jesús (0.09) presentan ratios pésimos de transporte pesado, lo que obliga a sus habitantes a depender del autobús o del vehículo privado.
+
+**4. El privilegio intermodal: "El Pla del Real":**
+Si hay un distrito que cumple de forma excelente con los requisitos de movilidad de la "Ciudad de los 15 minutos", es El Pla del Real.
+
+Destaca al tener las mejores ratios globales combinadas: es el número uno en Metro (0.42), uno de los mejores en EMT (1.76) y el tercer mejor en Valenbisi (0.51). Este es el modelo estándar al que debería aspirar el resto de la ciudad.
+
+**5. La trampa de las "zonas grises": Pobreza de transporte generalizada:**
+Hay distritos que no son lo suficientemente céntricos para tener buen Metro/Valenbisi, ni lo suficientemente periféricos para tener la ratio "inflada" de EMT. Son los verdaderos perjudicados del diseño urbano:
+
+Benicalap y Patraix tienen ratios por debajo de 1.0 en EMT, y ratios paupérrimas en Metro y Valenbisi. A sus habitantes les faltan alternativas reales de transporte público eficiente para moverse rápidamente por la ciudad, quedando totalmente desconectados del paradigma de los 15 minutos para trayectos de larga distancia.
+
+**CONCLUSIONES:**
+
+El análisis de dotación de transporte por cada 1.000 habitantes revela una arquitectura de movilidad radial y asimétrica en Valencia. Los datos demuestran la existencia de un 'privilegio intermodal' en los distritos céntricos y universitarios (como El Pla del Real o Algirós), donde los ciudadanos disfrutan de altas tasas de Metrovalencia, EMT y Valenbisi. Por el contrario, los distritos periféricos (Poblats del Nord y Sud) sufren una captividad hacia el autobús, con una exclusión total de la red de micromovilidad (0,00 en Valenbisi).
+
+Asimismo, el indicador destapa las vulnerabilidades de distritos de alta densidad poblacional como Quatre Carreres, L'Eixample o Patraix, que presentan ratios extremadamente deficientes en la red de transporte pesado (Metro). Esta radiografía corrobora que el cumplimiento de la 'Ciudad de los 15 minutos' a nivel multimodal depende estrechamente del código postal, evidenciando la necesidad de descentralizar servicios como Valenbisi y reforzar las infraestructuras de alta capacidad en los barrios consolidados.
+
+
+
+
+
