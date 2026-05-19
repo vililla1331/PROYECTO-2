@@ -105,3 +105,201 @@ grafico_movilidad <- ggplot(df_grafico, aes(y = distrito_limpio, x = Densidad, f
 # Mostramos el gráfico
 print(grafico_movilidad)
 ```
+
+```{r, fig.height=8, fig.width=10}
+
+library(dplyr)
+
+#calcular areas a partir de distritos-sf (algunas se repiten porque tienen areas separadas en el mapa)
+
+#sumar todas las areas de los distritos que tengan el mismo nomrbre
+
+#juntar los resultados con densidad_transporte y calcular paradas_por_km2 = Total_Transporte / area_km2, score_transporte_pesado = (FGV * 3 + EMT * 2 + Valenbisi * 1) / area_km2
+
+# ==========================================
+
+# SOLUCIÓN DE ÁREAS SEPARADAS (MULTI-POLÍGONOS)
+
+# ==========================================
+
+library(sf)
+library(dplyr)
+
+# PASOS 1 y 2: Calcular áreas y sumar las de los distritos repetidos
+
+tabla_superficies <- distritos_sf %>%
+
+  # Calculamos el área de cada "trozo" individual
+
+  mutate(area_trozo_km2 = as.numeric(st_area(.)) / 1000000) %>%
+
+  # Quitamos el mapa para poder agrupar matemáticamente
+
+  st_drop_geometry() %>%
+
+  # Agrupamos por el nombre del distrito
+
+  group_by(nombre) %>%
+
+  rename(distrito_limpio=nombre) %>%
+
+  # Sumamos todas las áreas que compartan el mismo nombre
+
+  summarise(area_total_km2 = sum(area_trozo_km2, na.rm = TRUE))
+
+
+
+# (Opcional) Comprobación de seguridad: 
+
+# Si ejecutas nrow(tabla_superficies) en la consola, ¡ahora te dará exactamente 19!
+
+
+
+# PASO 3: Juntar resultados y calcular densidades espaciales
+
+densidad_transportes <- densidad_transportes %>%
+
+  # Hacemos el join (ahora encajará 1 a 1 de forma perfecta)
+
+  left_join(tabla_superficies, by = "distrito_limpio") %>%
+
+  # Calculamos las nuevas variables usando el área total
+
+  mutate(
+
+    paradas_por_km2 = Total_Transporte / area_total_km2,
+
+    score_transporte_pesado = (FGV * 3 + EMT * 2 + Valenbisi * 1) / area_total_km2
+
+  )
+
+
+
+##########################################################################################################
+
+# --- 4. VISUALIZACIÓN DE DATOS ---
+
+
+
+# 4.1. Preparamos los datos: Densidad de cada transporte por km2
+
+densidad_transportes <- densidad_transportes %>%
+
+  mutate(
+
+    dens_EMT_km2 = EMT / area_total_km2,
+
+    dens_FGV_km2 = FGV / area_total_km2,
+
+    dens_Valenbisi_km2 = Valenbisi / area_total_km2
+
+  )
+
+
+
+# 4.2. Transformamos la tabla para ggplot (formato largo)
+
+df_grafico <- densidad_transportes %>%
+
+  select(distrito_limpio, dens_EMT_km2, dens_FGV_km2, dens_Valenbisi_km2) %>%
+
+  pivot_longer(cols = starts_with("dens_"), 
+
+               names_to = "Tipo_Transporte", 
+
+               values_to = "Densidad") %>%
+
+  mutate(Tipo_Transporte = str_remove(Tipo_Transporte, "dens_"),
+
+         Tipo_Transporte = str_remove(Tipo_Transporte, "_km2"))
+
+
+
+# 4.3. Ordenamos los distritos de MAYOR a MENOR según su Score General
+
+# Usamos reorder para que el gráfico quede perfectamente escalonado
+
+df_grafico$distrito_limpio <- factor(
+
+  df_grafico$distrito_limpio, 
+
+  levels = densidad_transportes$distrito_limpio[order(densidad_transportes$score_transporte_pesado)]
+
+)
+
+
+
+# 4.4. Creamos el gráfico (Método moderno, la Y es el distrito)
+
+grafico_movilidad <- ggplot(df_grafico, aes(y = distrito_limpio, x = Densidad, fill = Tipo_Transporte)) +
+
+  geom_col() +
+
+  scale_fill_manual(values = c("EMT" = "#E3120B", "FGV" = "#F2A900", "Valenbisi" = "#00A550")) +
+
+  labs(
+
+    title = "Densidad de la Red de Transporte en València",
+
+    subtitle = "Paradas y estaciones por cada Kilómetro Cuadrado (km²)",
+
+    y = "Distrito",  
+
+    x = "Paradas por km²", 
+
+    fill = "Servicio"
+
+  ) +
+
+  theme_minimal() +
+
+  theme(
+
+    legend.position = "bottom",
+
+    plot.title = element_text(face = "bold", size = 14),
+
+    axis.text.y = element_text(size = 9)
+
+  )
+
+
+
+grafico_movilidad
+
+
+
+# --- 5. GRÁFICO DE CUADRANTES: SERVICIOS VS TRANSPORTE ---
+analisis_final <- analisis_final %>%
+  distinct(distrito, .keep_all = TRUE)
+analisis_final <- analisis_final %>% rename(distrito_limpio=distrito)
+analisis_cruzado <- inner_join(densidad_transportes, analisis_final, by = "distrito_limpio")
+
+grafico_cuadrantes <- ggplot(analisis_cruzado, aes(x = indice_final, y = score_transporte_pesado, label = distrito_limpio)) +
+  
+  # Pintamos los puntos (tamaño fijo a 4)
+  geom_point(color = "#2c3e50", size = 4, alpha = 0.7) +
+  
+  # Añadimos el nombre de los distritos un poco más arriba
+  geom_text(vjust = -1.5, size = 3, fontface = "bold") +
+  
+  # Líneas medias que dividen los 4 cuadrantes (OJO: usando indice_final)
+  geom_vline(xintercept = mean(analisis_cruzado$indice_final, na.rm = TRUE), linetype = "dashed", color = "#e74c3c", linewidth = 1) +
+  geom_hline(yintercept = mean(analisis_cruzado$score_transporte_pesado, na.rm = TRUE), linetype = "dashed", color = "#e74c3c", linewidth = 1) +
+  
+  # Etiquetas y diseño final
+  labs(
+    title = "Resiliencia Urbana: Servicios vs. Transporte",
+    subtitle = "Cuadrante Superior Izquierdo: Faltan servicios, pero el transporte compensa la carencia",
+    x = "Índice de Servicios (Objetivo 1)",
+    y = "Densidad de Transporte Pesado por km² (Objetivo 2)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+# Imprimimos el gráfico
+grafico_cuadrantes
+
+```
